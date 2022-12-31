@@ -1,0 +1,1174 @@
+.centredevils-container {
+  width: 100%;
+  height: auto;
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  flex-direction: column;
+}
+.centredevils-top-container {
+  width: 100%;
+  height: 600px;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  background-size: cover;
+  justify-content: center;
+  background-image: linear-gradient(90deg, rgba(255, 0, 0, 0.7) 100.00%,rgba(255, 0, 0, 0.7) 100.00%),url("public/playground_assets/img23-1500w.jpg");
+  background-position: center;
+}
+.centredevils-hero {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  max-width: 1000px;
+  align-items: stretch;
+  padding-top: var(--dl-space-space-tripleunit);
+  padding-left: var(--dl-space-space-doubleunit);
+  padding-right: var(--dl-space-space-doubleunit);
+  flex-direction: row;
+  padding-bottom: var(--dl-space-space-tripleunit);
+  justify-content: center;
+}
+.centredevils-content-container {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.centredevils-container01 {
+  width: 100%;
+  height: 0px;
+  display: flex;
+  align-self: center;
+  align-items: center;
+  border-color: rgba(255, 255, 255, 0);
+  border-style: dashed;
+  border-width: 0px;
+  flex-direction: column;
+  justify-content: center;
+}
+.centredevils-container02 {
+  flex: 0 0 auto;
+  width: 100%;
+  display: flex;
+  align-self: center;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+}
+.centredevils-image {
+  width: 190px;
+  height: 207px;
+  object-fit: contain;
+  padding-bottom: var(--dl-space-space-halfunit);
+}
+.centredevils-text {
+  color: #ffffff;
+  font-size: 45px;
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 700;
+}
+.centredevils-text001 {
+  color: #ffffff;
+  padding: var(--dl-space-space-halfunit);
+  font-style: normal;
+  text-align: center;
+  font-family: Montserrat;
+  font-weight: 600;
+}
+.centredevils-container03 {
+  flex: 0 0 auto;
+  width: 100%;
+  display: flex;
+  align-self: center;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+}
+.centredevils-text002 {
+  color: rgb(255, 255, 255);
+  padding: var(--dl-space-space-halfunit);
+  font-style: normal;
+  text-align: center;
+  font-family: Montserrat;
+  font-weight: 500;
+}
+.centredevils-image1 {
+  width: 26px;
+  object-fit: cover;
+}
+.centredevils-main {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding-top: 36px;
+  padding-left: var(--dl-space-space-doubleunit);
+  padding-right: var(--dl-space-space-doubleunit);
+  flex-direction: column;
+  padding-bottom: 36px;
+  justify-content: flex-start;
+}
+.centredevils-text003 {
+  color: rgb(0, 0, 0);
+  font-size: 32px;
+  font-family: Montserrat;
+  text-transform: uppercase;
+}
+.centredevils-text004 {
+  color: #d1080c;
+  font-size: 45px;
+  font-family: Montserrat;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.centredevils-cards-container {
+  gap: 0;
+  width: 100%;
+  display: flex;
+  grid-gap: var(--dl-space-space-doubleunit);
+  max-width: 100%;
+  align-items: flex-start;
+  padding-top: var(--dl-space-space-unit);
+  padding-left: var(--dl-space-space-quadruple);
+  padding-right: var(--dl-space-space-quadruple);
+  flex-direction: row;
+  padding-bottom: var(--dl-space-space-unit);
+  justify-content: center;
+}
+.centredevils-container04 {
+  width: 25%;
+  height: auto;
+  display: flex;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+}
+.centredevils-image2 {
+  width: 60px;
+  object-fit: cover;
+  margin-right: var(--dl-space-space-halfunit);
+}
+.centredevils-text006 {
+  font-size: 18px;
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 600;
+}
+.centredevils-container05 {
+  width: 25%;
+  height: auto;
+  display: flex;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+}
+.centredevils-image3 {
+  width: 45px;
+  object-fit: cover;
+  margin-right: var(--dl-space-space-halfunit);
+}
+.centredevils-text007 {
+  font-size: 16px;
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 600;
+}
+.centredevils-container06 {
+  width: 25%;
+  height: auto;
+  display: flex;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+}
+.centredevils-image4 {
+  width: 45px;
+  object-fit: cover;
+  margin-right: var(--dl-space-space-halfunit);
+}
+.centredevils-text008 {
+  font-size: 16px;
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 600;
+}
+.centredevils-container07 {
+  width: 25%;
+  height: auto;
+  display: flex;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+}
+.centredevils-image5 {
+  width: 45px;
+  object-fit: cover;
+  margin-right: var(--dl-space-space-halfunit);
+}
+.centredevils-text009 {
+  font-size: 16px;
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 600;
+}
+.centredevils-container08 {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+.centredevils-text010 {
+  color: #d1080c;
+  font-size: 45px;
+  font-family: Montserrat;
+  text-transform: uppercase;
+}
+.centredevils-text011 {
+  font-style: normal;
+  font-weight: 900;
+}
+.centredevils-text013 {
+  width: 80%;
+  text-align: justify;
+  font-family: Montserrat;
+  padding-bottom: var(--dl-space-space-tripleunit);
+}
+.centredevils-text014 {
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text015 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text016 {
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text017 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text018 {
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text019 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text020 {
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text021 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text022 {
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text023 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text024 {
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text025 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text026 {
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text027 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text028 {
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text029 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text030 {
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text031 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text032 {
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text033 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text034 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text035 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text036 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text037 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text038 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text039 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text040 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text041 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text042 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text043 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text044 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text045 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text046 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text047 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text048 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text049 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text050 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text051 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text052 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text053 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text054 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text055 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text056 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text057 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text058 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text059 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text060 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text061 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text062 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text063 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text064 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text065 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text066 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text067 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text068 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text069 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text070 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text071 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text072 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text073 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text074 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text075 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text076 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text077 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text078 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text079 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text080 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text081 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text082 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text083 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text084 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text085 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text086 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text087 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-text088 {
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+}
+.centredevils-text089 {
+  font-family: Montserrat;
+  line-height: 2;
+}
+.centredevils-container09 {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+.centredevils-text092 {
+  color: rgb(209, 8, 12);
+  font-size: 45px;
+  font-family: Montserrat;
+  text-transform: uppercase;
+}
+.centredevils-text093 {
+  font-style: normal;
+  font-weight: 900;
+}
+.centredevils-text095 {
+  width: 80%;
+  font-size: 18px;
+  text-align: justify;
+  font-family: Montserrat;
+  line-height: 2;
+  padding-bottom: var(--dl-space-space-doubleunit);
+}
+.centredevils-text096 {
+  font-weight: 700;
+}
+.centredevils-text098 {
+  font-weight: 700;
+}
+.centredevils-text100 {
+  font-weight: 700;
+}
+.centredevils-text102 {
+  font-weight: 700;
+}
+.centredevils-text104 {
+  font-weight: 700;
+}
+.centredevils-text106 {
+  font-weight: 700;
+}
+.centredevils-text108 {
+  font-weight: 700;
+}
+.centredevils-text110 {
+  font-weight: 700;
+}
+.centredevils-text112 {
+  font-weight: 700;
+}
+.centredevils-text114 {
+  font-weight: 700;
+}
+.centredevils-text116 {
+  font-weight: 700;
+}
+.centredevils-text118 {
+  font-weight: 700;
+}
+.centredevils-text120 {
+  font-weight: 700;
+}
+.centredevils-text122 {
+  font-weight: 700;
+}
+.centredevils-text124 {
+  font-weight: 700;
+}
+.centredevils-text126 {
+  font-weight: 700;
+}
+.centredevils-text128 {
+  font-weight: 700;
+}
+.centredevils-text130 {
+  font-weight: 700;
+}
+.centredevils-text132 {
+  font-weight: 700;
+}
+.centredevils-text134 {
+  font-weight: 700;
+}
+.centredevils-text136 {
+  font-weight: 700;
+}
+.centredevils-text138 {
+  font-weight: 700;
+}
+.centredevils-text140 {
+  font-weight: 700;
+}
+.centredevils-text142 {
+  font-weight: 700;
+}
+.centredevils-text144 {
+  width: 80%;
+  font-size: 18px;
+  text-align: left;
+  font-family: Montserrat;
+  line-height: 2;
+  padding-bottom: var(--dl-space-space-tripleunit);
+}
+.centredevils-text146 {
+  font-weight: 700;
+}
+.centredevils-container10 {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+.centredevils-text148 {
+  color: rgb(209, 8, 12);
+  font-size: 45px;
+  font-family: Montserrat;
+  text-transform: uppercase;
+}
+.centredevils-text149 {
+  font-style: normal;
+  font-weight: 900;
+}
+.centredevils-text151 {
+  width: 80%;
+  font-size: 18px;
+  text-align: justify;
+  font-family: Montserrat;
+  line-height: 2;
+  padding-bottom: var(--dl-space-space-doubleunit);
+}
+.centredevils-text152 {
+  font-weight: 700;
+}
+.centredevils-text154 {
+  font-weight: 700;
+}
+.centredevils-text156 {
+  font-weight: 700;
+}
+.centredevils-text158 {
+  font-weight: 700;
+}
+.centredevils-text160 {
+  font-weight: 700;
+}
+.centredevils-text162 {
+  font-weight: 700;
+}
+.centredevils-text164 {
+  font-weight: 700;
+}
+.centredevils-text166 {
+  font-weight: 700;
+}
+.centredevils-text168 {
+  font-weight: 700;
+}
+.centredevils-text170 {
+  font-weight: 700;
+}
+.centredevils-text172 {
+  width: 80%;
+  font-size: 18px;
+  text-align: left;
+  font-family: Montserrat;
+  line-height: 2;
+  padding-bottom: var(--dl-space-space-tripleunit);
+}
+.centredevils-text174 {
+  font-weight: 700;
+}
+.centredevils-container11 {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+.centredevils-text176 {
+  color: rgb(209, 8, 12);
+  font-size: 45px;
+  font-family: Montserrat;
+  text-transform: uppercase;
+}
+.centredevils-text177 {
+  font-style: normal;
+  font-weight: 900;
+}
+.centredevils-text179 {
+  width: 80%;
+  font-size: 18px;
+  text-align: justify;
+  font-family: Montserrat;
+  line-height: 2;
+  padding-bottom: var(--dl-space-space-doubleunit);
+}
+.centredevils-text180 {
+  font-style: normal;
+  font-weight: 700;
+}
+.centredevils-text181 {
+  font-style: normal;
+  font-weight: 500;
+}
+.centredevils-text182 {
+  font-style: normal;
+  font-weight: 700;
+}
+.centredevils-text183 {
+  font-style: normal;
+  font-weight: 500;
+}
+.centredevils-text184 {
+  font-style: normal;
+  font-weight: 700;
+}
+.centredevils-text185 {
+  font-style: normal;
+  font-weight: 500;
+}
+.centredevils-text186 {
+  font-style: normal;
+  font-weight: 700;
+}
+.centredevils-text187 {
+  font-style: normal;
+  font-weight: 500;
+}
+.centredevils-text188 {
+  font-style: normal;
+  font-weight: 700;
+}
+.centredevils-text189 {
+  font-style: normal;
+  font-weight: 500;
+}
+.centredevils-text190 {
+  font-style: normal;
+  font-weight: 700;
+}
+.centredevils-text191 {
+  font-style: normal;
+  font-weight: 500;
+}
+.centredevils-text192 {
+  font-style: normal;
+  font-weight: 700;
+}
+.centredevils-text193 {
+  font-style: normal;
+  font-weight: 500;
+}
+.centredevils-text195 {
+  width: 80%;
+  font-size: 18px;
+  text-align: left;
+  font-family: Montserrat;
+  line-height: 2;
+  padding-bottom: var(--dl-space-space-tripleunit);
+}
+.centredevils-text197 {
+  font-weight: 700;
+}
+.centredevils-container12 {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+.centredevils-text199 {
+  color: rgb(209, 8, 12);
+  font-size: 45px;
+  font-family: Montserrat;
+  text-transform: uppercase;
+}
+.centredevils-text200 {
+  font-style: normal;
+  font-weight: 900;
+}
+.centredevils-text202 {
+  width: 80%;
+  font-size: 18px;
+  text-align: justify;
+  font-family: Montserrat;
+  line-height: 2;
+  padding-bottom: var(--dl-space-space-doubleunit);
+}
+.centredevils-text203 {
+  font-weight: 700;
+}
+.centredevils-text205 {
+  font-weight: 700;
+}
+.centredevils-text207 {
+  font-weight: 700;
+}
+.centredevils-text209 {
+  font-weight: 700;
+}
+.centredevils-text211 {
+  font-weight: 700;
+}
+.centredevils-text214 {
+  width: 80%;
+  font-size: 18px;
+  text-align: left;
+  font-family: Montserrat;
+  line-height: 2;
+  padding-bottom: var(--dl-space-space-tripleunit);
+}
+.centredevils-text216 {
+  font-weight: 700;
+}
+.centredevils-container13 {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+.centredevils-text218 {
+  width: 80%;
+  font-size: 18px;
+  font-style: normal;
+  text-align: justify;
+  font-family: Montserrat;
+  font-weight: 700;
+  line-height: 2;
+  padding-bottom: var(--dl-space-space-doubleunit);
+}
+.centredevils-text219 {
+  width: 80%;
+  font-size: 24px;
+  font-style: normal;
+  text-align: center;
+  font-family: Montserrat;
+  font-weight: 900;
+  line-height: 2;
+  padding-top: 0px;
+  padding-bottom: 0px;
+}
+.centredevils-text222 {
+  color: #ff0000;
+}
+.centredevils-footer-container {
+  width: 100%;
+  height: 400px;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  background-size: cover;
+  justify-content: center;
+  background-image: url("public/playground_assets/arrow-bg.svg"),linear-gradient(90deg, rgb(209, 8, 12) 100.00%,rgb(209, 8, 12) 100.00%);
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.centredevils-footer {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  max-width: 1000px;
+  align-items: stretch;
+  padding-top: var(--dl-space-space-tripleunit);
+  padding-left: var(--dl-space-space-doubleunit);
+  padding-right: var(--dl-space-space-doubleunit);
+  flex-direction: row;
+  padding-bottom: var(--dl-space-space-tripleunit);
+  justify-content: center;
+}
+.centredevils-content-container1 {
+  display: flex;
+  align-self: center;
+  align-items: center;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.centredevils-container14 {
+  flex: 0 0 auto;
+  width: 100%;
+  display: flex;
+  align-self: center;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+}
+.centredevils-text223 {
+  color: rgb(255, 255, 255);
+  font-size: 45px;
+  font-style: normal;
+  font-family: Montserrat;
+  font-weight: 700;
+  padding-bottom: var(--dl-space-space-halfunit);
+}
+.centredevils-image6 {
+  width: 45px;
+  object-fit: cover;
+}
+@media(max-width: 991px) {
+  .centredevils-hero {
+    padding-left: var(--dl-space-space-tripleunit);
+    padding-right: var(--dl-space-space-tripleunit);
+  }
+  .centredevils-cards-container {
+    justify-content: center;
+  }
+  .centredevils-footer {
+    padding-left: var(--dl-space-space-tripleunit);
+    padding-right: var(--dl-space-space-tripleunit);
+  }
+}
+@media(max-width: 767px) {
+  .centredevils-hero {
+    justify-content: center;
+  }
+  .centredevils-content-container {
+    align-items: center;
+  }
+  .centredevils-text {
+    font-size: 2.5rem;
+  }
+  .centredevils-text001 {
+    text-align: center;
+  }
+  .centredevils-text002 {
+    text-align: center;
+  }
+  .centredevils-main {
+    padding-left: var(--dl-space-space-unit);
+    padding-right: var(--dl-space-space-unit);
+  }
+  .centredevils-footer {
+    justify-content: center;
+  }
+  .centredevils-content-container1 {
+    align-items: center;
+  }
+  .centredevils-text223 {
+    font-size: 2.5rem;
+  }
+}
+@media(max-width: 479px) {
+  .centredevils-image {
+    width: 150px;
+  }
+  .centredevils-text {
+    font-size: 2rem;
+    text-align: center;
+    line-height: 1.3;
+  }
+  .centredevils-text002 {
+    font-size: 13px;
+  }
+  .centredevils-main {
+    padding-left: var(--dl-space-space-doubleunit);
+    padding-right: var(--dl-space-space-doubleunit);
+  }
+  .centredevils-cards-container {
+    gap: var(--dl-space-space-doubleunit);
+    width: 100%;
+    flex-wrap: wrap;
+    padding-left: 0px;
+    padding-right: 0px;
+    flex-direction: row;
+    padding-bottom: 36px;
+    justify-content: center;
+  }
+  .centredevils-container04 {
+    width: 50%;
+  }
+  .centredevils-image2 {
+    width: 42px;
+  }
+  .centredevils-text006 {
+    font-size: 14px;
+  }
+  .centredevils-container05 {
+    flex: 1;
+    width: 50%;
+    justify-content: center;
+  }
+  .centredevils-image3 {
+    width: 32px;
+  }
+  .centredevils-text007 {
+    font-size: 14px;
+  }
+  .centredevils-container06 {
+    flex: 1;
+    width: 50%;
+  }
+  .centredevils-image4 {
+    width: 32px;
+  }
+  .centredevils-text008 {
+    font-size: 14px;
+    font-style: normal;
+    font-family: Montserrat;
+    font-weight: 600;
+  }
+  .centredevils-container07 {
+    flex: 1;
+    width: 50%;
+  }
+  .centredevils-image5 {
+    width: 32px;
+  }
+  .centredevils-text009 {
+    font-size: 14px;
+  }
+  .centredevils-text010 {
+    font-size: 30px;
+    padding-top: var(--dl-space-space-unit);
+  }
+  .centredevils-text013 {
+    width: 100%;
+    font-size: 14px;
+    text-align: center;
+    padding-top: var(--dl-space-space-doubleunit);
+  }
+  .centredevils-text092 {
+    font-size: 30px;
+  }
+  .centredevils-text095 {
+    width: 100%;
+    font-size: 14px;
+    text-align: center;
+    padding-top: var(--dl-space-space-doubleunit);
+  }
+  .centredevils-text144 {
+    width: 100%;
+    font-size: 14px;
+  }
+  .centredevils-text148 {
+    font-size: 30px;
+  }
+  .centredevils-text151 {
+    width: 100%;
+    font-size: 14px;
+    text-align: center;
+    padding-top: var(--dl-space-space-doubleunit);
+  }
+  .centredevils-text172 {
+    width: 100%;
+    font-size: 14px;
+  }
+  .centredevils-text176 {
+    font-size: 30px;
+  }
+  .centredevils-text179 {
+    width: 100%;
+    font-size: 14px;
+    text-align: center;
+    padding-top: var(--dl-space-space-doubleunit);
+  }
+  .centredevils-text195 {
+    width: 100%;
+    font-size: 14px;
+  }
+  .centredevils-text199 {
+    font-size: 30px;
+  }
+  .centredevils-text202 {
+    width: 100%;
+    font-size: 14px;
+    text-align: center;
+    padding-top: var(--dl-space-space-doubleunit);
+  }
+  .centredevils-text214 {
+    width: 100%;
+    font-size: 14px;
+  }
+  .centredevils-text218 {
+    width: 100%;
+    font-size: 16px;
+    line-height: 1.75;
+  }
+  .centredevils-text219 {
+    width: 100%;
+    font-size: 20px;
+    line-height: 1.55;
+  }
+  .centredevils-text223 {
+    font-size: 2rem;
+    text-align: center;
+  }
+}
