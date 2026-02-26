@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  football-bot:
+    build: .
+    restart: unless-stopped
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - PREMIER_LEAGUE_WEBHOOK=${PREMIER_LEAGUE_WEBHOOK}
+      - LA_LIGA_WEBHOOK=${LA_LIGA_WEBHOOK}
+      - SERIE_A_WEBHOOK=${SERIE_A_WEBHOOK}
+      - BUNDESLIGA_WEBHOOK=${BUNDESLIGA_WEBHOOK}
+      - LIGUE_1_WEBHOOK=${LIGUE_1_WEBHOOK}
+      - OTHER_LEAGUES_WEBHOOK=${OTHER_LEAGUES_WEBHOOK}
+      - DB_PATH=/data/football_ops.db
+    volumes:
+      - football_data:/data
+
+volumes:
+  football_data:
