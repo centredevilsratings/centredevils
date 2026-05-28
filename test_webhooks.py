@@ -136,12 +136,50 @@ async def send_test_embed(
         return False
 
 
+async def send_tweet_drafts_test(client: httpx.AsyncClient) -> bool:
+    webhook_url = os.environ.get("TWEET_DRAFTS_WEBHOOK", "")
+    if not webhook_url:
+        print("  ⚠️  Tweet Drafts: TWEET_DRAFTS_WEBHOOK not set — skipping")
+        return False
+
+    sample_tweet = (
+        "🚨🚨| BREAKING: This is a 𝐓𝐄𝐒𝐓 message from the CentreGoals tweet drafter. ✅🏴‍☠️\n\n"
+        "If you see this, the webhook is wired up correctly.\n\n"
+        "[@CentreGoalsBot]"
+    )
+    embed = {
+        "title": "📝 Tweet Draft Ready",
+        "description": f"```\n{sample_tweet}\n```",
+        "color": 0x1DA1F2,
+        "fields": [
+            {"name": "Category", "value": "Test", "inline": True},
+            {"name": "Length", "value": f"{len(sample_tweet)}/280", "inline": True},
+            {"name": "Source", "value": "[Article](https://example.com/test)", "inline": True},
+        ],
+        "footer": {"text": "From: Test Source"},
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    payload = {"embeds": [embed]}
+    try:
+        resp = await client.post(webhook_url, json=payload, timeout=10)
+        if resp.status_code in (200, 204):
+            print("  ✅ Tweet Drafts: embed posted successfully")
+            return True
+        print(f"  ❌ Tweet Drafts: HTTP {resp.status_code} — {resp.text[:100]}")
+        return False
+    except Exception as e:
+        print(f"  ❌ Tweet Drafts: {e}")
+        return False
+
+
 async def main():
     print("\n⚽  Football Ops Alert Bot — Webhook Test")
     print("=" * 50)
 
     configured = sum(1 for env, _, _ in WEBHOOKS.values() if os.environ.get(env))
-    print(f"Found {configured}/{len(WEBHOOKS)} webhooks configured\n")
+    if os.environ.get("TWEET_DRAFTS_WEBHOOK"):
+        configured += 1
+    print(f"Found {configured} webhooks configured (league + drafts)\n")
 
     if configured == 0:
         print("❌ No webhooks configured. Set the environment variables and retry.")
@@ -153,6 +191,11 @@ async def main():
             result = await send_test_embed(client, league_key, env_var, label, color)
             results.append(result)
             await asyncio.sleep(0.5)  # avoid rate limits
+
+        # Also test the CentreGoals tweet drafts webhook
+        drafts_result = await send_tweet_drafts_test(client)
+        if os.environ.get("TWEET_DRAFTS_WEBHOOK"):
+            results.append(drafts_result)
 
     passed = sum(results)
     total = len([v for _, v in zip(results, WEBHOOKS.values()) if os.environ.get(v[0])])

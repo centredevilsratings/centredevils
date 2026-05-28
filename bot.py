@@ -21,6 +21,9 @@ import httpx
 from bs4 import BeautifulSoup
 from langdetect import detect
 
+from tweet_drafter import run_drafter_loop
+from x_stream import run_x_stream
+
 # ─── Logging ────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -578,15 +581,25 @@ async def main():
         "Accept-Language": "en-GB,en;q=0.9",
     }
 
-    async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
-        while True:
-            try:
-                await run_poll_cycle(client, conn)
-            except Exception as e:
-                log.error(f"Poll cycle error: {e}", exc_info=True)
+    async def main_alert_loop():
+        async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
+            while True:
+                try:
+                    await run_poll_cycle(client, conn)
+                except Exception as e:
+                    log.error(f"Poll cycle error: {e}", exc_info=True)
+                log.info(f"Sleeping {POLL_INTERVAL}s until next poll...")
+                await asyncio.sleep(POLL_INTERVAL)
 
-            log.info(f"Sleeping {POLL_INTERVAL}s until next poll...")
-            await asyncio.sleep(POLL_INTERVAL)
+    # Three concurrent loops:
+    #   1. League alert pipeline (existing — Google News -> league channels)
+    #   2. RSS-based CentreGoals tweet drafter (slower, catches outlets that don't post to X)
+    #   3. X filtered stream (real-time — be FIRST to draft scoops from journalists)
+    await asyncio.gather(
+        main_alert_loop(),
+        run_drafter_loop(DB_PATH),
+        run_x_stream(DB_PATH),
+    )
 
 
 if __name__ == "__main__":

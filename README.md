@@ -15,6 +15,7 @@ A production-ready Discord bot that monitors football news in **any language**, 
 | 🧩 **Deduplication** | Clusters related stories within 6-hour windows, suppresses duplicates |
 | 🚨 **Urgency scoring** | 1–5 scale; breaking news pings `@here` automatically |
 | 💾 **Persistent DB** | SQLite stores all articles, clusters, and post history |
+| 📝 **CentreGoals tweet drafter** | Listens to top journalists on X via filtered stream + outlet RSS; generates pre-written tweets in CentreGoals voice and drops them into a dedicated Discord channel for one-click copy/paste. Goal: be FIRST. |
 
 ---
 
@@ -141,6 +142,8 @@ In **Environment** tab, add each variable:
 | `BUNDESLIGA_WEBHOOK` | `https://discord.com/api/webhooks/...` |
 | `LIGUE_1_WEBHOOK` | `https://discord.com/api/webhooks/...` |
 | `OTHER_LEAGUES_WEBHOOK` | `https://discord.com/api/webhooks/...` |
+| `TWEET_DRAFTS_WEBHOOK` | `https://discord.com/api/webhooks/...` (CentreGoals draft channel) |
+| `TWITTER_BEARER_TOKEN` | X API v2 Bearer Token (Basic tier+ for streaming) |
 | `DB_PATH` | `/data/football_ops.db` |
 
 ### Step 6: Deploy
