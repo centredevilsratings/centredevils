@@ -54,6 +54,7 @@ JOURNALIST_OUTLET_QUERIES = [
     'site:gazzetta.it calcio',
     'site:lequipe.fr football',
     'site:bild.de fussball',
+    'site:theguardian.com/football',
 ]
 
 # Source name (as it appears in Google News) -> X handle for attribution
@@ -82,6 +83,14 @@ SOURCE_HANDLES = {
     "L'Équipe": "@lequipe",
     "L'Equipe": "@lequipe",
     "Bild": "@BILD",
+    "The Guardian": "@guardian_sport",
+    "Guardian": "@guardian_sport",
+    "RMC Sport": "@RMCsport",
+    "Bleacher Report": "@brfootball",
+    "B/R Football": "@brfootball",
+    "OneFootball": "@OneFootball",
+    "EuroFoot": "@eurofootcom",
+    "Relevo": "@relevo",
 }
 
 

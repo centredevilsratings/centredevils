@@ -31,27 +31,65 @@ X_API_BASE = "https://api.twitter.com/2"
 RECONNECT_DELAY_INITIAL = 5
 RECONNECT_DELAY_MAX = 300
 
-# Top transfer-scoop X handles + major outlets.
-# Listed in order of breaking-news priority.
+# Tier 1: top transfer-scoop journalists (global)
 TIER_1_JOURNALISTS = [
     "FabrizioRomano",
     "David_Ornstein",
-    "Plettigoal",
-    "MatteMoretto",
-    "DiMarzio",
-    "JacobsBen",
+    "Plettigoal",          # Florian Plettenberg
+    "MatteMoretto",        # Matteo Moretto
+    "DiMarzio",            # Gianluca Di Marzio
+    "JacobsBen",           # Ben Jacobs
     "sachatavolieri",
     "NicoSchira",
     "RudyGaletti",
     "GuillemBalague",
     "Santi_J_FM",
-    "ChrisWheatley_",
-    "LaurensJulien",
-    "KaveSolhekol",
-    "PhilHay_",
-    "JamesPearceLFC",
+    "cfbayern",            # Christian Falk (Bild transfer scoops)
+    "FabriceHawkins",      # RMC Sport transfers
+    "MartynZiegler",       # The Times
+    "SamiMokbel81",        # Sami Mokbel (Daily Mail)
 ]
 
+# Club / league beat reporters
+CLUB_REPORTERS = [
+    # Man Utd
+    "samuelluckhurst",     # Samuel Luckhurst (MEN)
+    "ChrisWheelerDM",      # Chris Wheeler (Daily Mail Man Utd)
+    "RobDawsonESPN",       # Rob Dawson (ESPN Man Utd)
+    "ChrisWheatley_",      # Chris Wheatley
+    # Liverpool
+    "PhilHay_",
+    "JamesPearceLFC",
+    # Sky Sports News
+    "KaveSolhekol",
+    # ESPN La Liga
+    "LaurensJulien",
+    # Spain
+    "MarioCortegana",
+    "GuillermoRai_",       # Real Madrid beat
+    "gerardromero",        # Barça
+    # Bayern Munich
+    "iMiaSanMia",
+]
+
+# Aggregator brands & club-specific aggregators
+AGGREGATORS = [
+    # Rivals (so we can see what they post)
+    "TouchlineX",
+    "DeadlineDayLive",
+    "AlbicelesteTalk",
+    # Club aggregators
+    "MadridZone",
+    "MadridXtra",
+    "ManagingBarca",
+    "PSGINT_",
+    "atletiuniverse",
+    "AlNassrZone",
+    "TotalCristiano",
+    "mufcMPB",
+]
+
+# Major outlet brand accounts
 MAJOR_OUTLETS = [
     "TheAthleticFC",
     "BBCSport",
@@ -64,24 +102,50 @@ MAJOR_OUTLETS = [
     "lequipe",
     "BILD",
     "relevo",
+    "RMCsport",
+    "brfootball",
+    "OneFootball",
+    "BeFootball",
+    "eurofootcom",
 ]
 
+# Non-English aggregators
+REGIONAL_AGGREGATORS = [
+    "ActuFoot_",           # French aggregator
+    "vibesfoot",           # French aggregator
+    "ActuSPL",             # Saudi Pro League aggregator
+]
+
+# Our own handle — exclude from drafting so we don't redraft our own tweets.
+SELF_HANDLES = {"centredevils"}
+
+# Combined target list (deduped, excluding self)
+ALL_TARGET_HANDLES = []
+_seen = set()
+for _group in (TIER_1_JOURNALISTS, CLUB_REPORTERS, AGGREGATORS, MAJOR_OUTLETS, REGIONAL_AGGREGATORS):
+    for _h in _group:
+        if _h.lower() in SELF_HANDLES or _h.lower() in _seen:
+            continue
+        _seen.add(_h.lower())
+        ALL_TARGET_HANDLES.append(_h)
+
 # Handles whose tweets are usually trustworthy enough to draft immediately
-# even before extra verification. (Just used for category tagging.)
 HIGH_TRUST_HANDLES = {h.lower() for h in TIER_1_JOURNALISTS}
 
 
 def chunked_or_rule(handles: list[str], tag: str) -> list[dict]:
     """Build filtered-stream rules. Each rule capped at ~900 chars
-    (X limit is 1024 on Basic tier; leave headroom)."""
+    (X Basic-tier limit is 1024; leave headroom).
+    Note: NO lang filter — Claude translates, and lang filtering with OR
+    has tricky precedence in X's query syntax."""
     rules: list[dict] = []
     parts: list[str] = []
     current_len = 0
-    suffix = " -is:retweet -is:reply lang:en OR lang:es OR lang:it OR lang:de OR lang:fr OR lang:pt OR lang:tr"
+    suffix = " -is:retweet -is:reply"
     for h in handles:
         chunk = f"from:{h}"
         added = (4 if parts else 0) + len(chunk)
-        if current_len + added + len(suffix) > 900 and parts:
+        if current_len + added + len(suffix) + 2 > 900 and parts:
             value = "(" + " OR ".join(parts) + ")" + suffix
             rules.append({"value": value, "tag": tag})
             parts = [chunk]
@@ -212,8 +276,16 @@ async def add_rules(client: httpx.AsyncClient, rules: list[dict]) -> None:
 
 
 async def sync_stream_rules(client: httpx.AsyncClient) -> None:
-    desired = chunked_or_rule(TIER_1_JOURNALISTS, "tier1_journos") + chunked_or_rule(MAJOR_OUTLETS, "outlets")
-    log.info(f"Syncing {len(desired)} stream rules (target handles: {len(TIER_1_JOURNALISTS) + len(MAJOR_OUTLETS)})")
+    desired = (
+        chunked_or_rule(TIER_1_JOURNALISTS, "tier1_journos")
+        + chunked_or_rule(CLUB_REPORTERS, "club_reporters")
+        + chunked_or_rule(AGGREGATORS, "aggregators")
+        + chunked_or_rule(MAJOR_OUTLETS, "outlets")
+        + chunked_or_rule(REGIONAL_AGGREGATORS, "regional")
+    )
+    log.info(
+        f"Syncing {len(desired)} stream rules across {len(ALL_TARGET_HANDLES)} unique handles"
+    )
     existing = await get_existing_rules(client)
     if existing:
         log.info(f"Removing {len(existing)} existing rules")
@@ -246,6 +318,19 @@ Rewrite as a CentreGoals tweet. Attribute source as [@{source_handle}]. Return J
         return None
 
 
+RIVAL_HANDLES = {"touchlinex", "deadlinedaylive", "albicelestetalk"}
+
+
+def classify_source(handle: str) -> tuple[str, int]:
+    """Return (badge, color_hint) for the source handle."""
+    h = handle.lower()
+    if h in RIVAL_HANDLES:
+        return "⚔️ RIVAL", 0x9B59B6  # purple — rival is breaking
+    if h in HIGH_TRUST_HANDLES:
+        return "⭐ TIER 1", 0xF1C40F  # gold — top journo
+    return "📰 SOURCE", 0x1DA1F2     # twitter blue — default
+
+
 async def post_draft(
     client: httpx.AsyncClient,
     tweet_text: str,
@@ -260,11 +345,14 @@ async def post_draft(
     char_count = len(tweet_text)
     over_limit = char_count > 280
     source_url = f"https://x.com/{source_handle}/status/{source_tweet_id}"
+    badge, color = classify_source(source_handle)
+    if over_limit:
+        color = 0xE74C3C
 
     embed = {
-        "title": "📝 Tweet Draft Ready",
+        "title": f"{badge} — Tweet Draft Ready",
         "description": f"```\n{tweet_text}\n```",
-        "color": 0xE74C3C if over_limit else 0x1DA1F2,
+        "color": color,
         "fields": [
             {"name": "Category", "value": category.replace("_", " ").title(), "inline": True},
             {
@@ -417,6 +505,9 @@ async def run_x_stream(db_path: str) -> None:
 
     conn = init_x_db(db_path)
     log.info(
-        f"X stream starting — tracking {len(TIER_1_JOURNALISTS)} journalists + {len(MAJOR_OUTLETS)} outlets"
+        f"X stream starting — tracking {len(ALL_TARGET_HANDLES)} handles "
+        f"({len(TIER_1_JOURNALISTS)} tier-1, {len(CLUB_REPORTERS)} club reporters, "
+        f"{len(AGGREGATORS)} aggregators, {len(MAJOR_OUTLETS)} outlets, "
+        f"{len(REGIONAL_AGGREGATORS)} regional)"
     )
     await stream_loop(conn)
