@@ -15,33 +15,61 @@ import tweepy
 log = logging.getLogger("football-bot.x_stream")
 
 
-# ~57 football journalists & outlets — handles only, no leading @.
+# ~95 football journalists, outlets, aggregators & rivals.
+# Handles only — no leading @.
 JOURNALISTS: list[str] = [
-    # Tier-1 transfer reporters
+    # ── Tier-1 transfer reporters (global scoop-breakers) ──
     "FabrizioRomano", "David_Ornstein", "DiMarzio", "NicoSchira",
-    "JacobsBen", "Plettigoal", "SkyKaveh", "SkySportsLyall",
-    "GeoffShreeves", "cfbayern",
-    # English press
-    "Matt_Law_DT", "johncrossmirror", "SamiMokbel81", "JamesPearceLFC",
+    "JacobsBen", "Plettigoal", "MatteMoretto", "sachatavolieri",
+    "RudyGaletti", "cfbayern", "FabriceHawkins", "MartynZiegler",
+    "SamiMokbel81", "SkyKaveh", "GeoffShreeves", "SkySportsLyall",
+
+    # ── English club beat writers ──
+    "Matt_Law_DT", "johncrossmirror", "JamesPearceLFC", "PhilHay_",
     "dhytner", "JamieJackson___", "sistoney67", "lauriewhitwell",
     "AdamCrafton_", "henrywinter", "miguel_delaney", "OliverKay",
-    "DTathletic", "honigstein", "tariqpanja", "sidlowe", "GuillemBalague",
-    # French
-    "manulonjon", "Tanziloic", "Santi_J_FM", "mohamedbouhafsi",
-    "RomainMolina", "hugoguillemet",
-    # Outlets — Spanish
-    "marca", "diarioas", "mundodeportivo", "sport",
-    # Outlets — Italian
+    "DTathletic", "honigstein", "tariqpanja", "sidlowe",
+    "GuillemBalague", "samuelluckhurst", "ChrisWheelerDM",
+    "RobDawsonESPN", "ChrisWheatley_",
+
+    # ── French press ──
+    "manulonjon", "Tanziloic", "mohamedbouhafsi", "RomainMolina",
+    "hugoguillemet",
+
+    # ── Spanish press ──
+    "Santi_J_FM", "MarioCortegana", "GuillermoRai_", "gerardromero",
+
+    # ── Outlets — Spanish ──
+    "marca", "diarioas", "mundodeportivo", "sport", "relevo",
+
+    # ── Outlets — Italian ──
     "Gazzetta_it", "tuttosport",
-    # Outlets — German
+
+    # ── Outlets — German ──
     "BILD_Sport", "SPORTBILD", "kicker",
-    # Outlets — French
+
+    # ── Outlets — French ──
     "lequipe", "RMCsport",
-    # UK / international outlets
+
+    # ── Outlets — UK / international ──
     "SkySportsNews", "BBCSport", "BBCFootball", "TheAthleticFC",
     "ESPNFC", "TeleFootball", "guardian_sport", "goal",
     "GetFootballNews", "itvfootball", "talkSPORT", "SunSport",
     "SkySport",
+
+    # ── Modern aggregator outlets ──
+    "brfootball", "OneFootball", "BeFootball", "eurofootcom",
+
+    # ── Rival aggregators (track to see what they break) ──
+    "TouchlineX", "DeadlineDayLive", "AlbicelesteTalk",
+
+    # ── Club / fan aggregator accounts ──
+    "MadridZone", "MadridXtra", "ManagingBarca", "ATMUniverse",
+    "PSGINT_", "iMiaSanMia", "AlNassrZone", "TotalCristiano",
+    "mufcMPB",
+
+    # ── Regional / language aggregators ──
+    "ActuFoot_", "vibesfoot", "ActuSPL",
 ]
 
 
@@ -77,7 +105,7 @@ class _Listener(tweepy.StreamingClient):
         if tweet is None:
             return
 
-        # Skip retweets and replies — we want original posts.
+        # Skip retweets, replies and quote-tweets — we want original posts.
         for ref in (tweet.referenced_tweets or []):
             if ref.type in ("retweeted", "replied_to", "quoted"):
                 return
