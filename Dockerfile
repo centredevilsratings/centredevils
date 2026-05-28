@@ -13,6 +13,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY bot.py .
+COPY x_stream.py .
+COPY tweet_drafter.py .
 COPY test_webhooks.py .
 
 # Persistent volume mount point for SQLite DB
