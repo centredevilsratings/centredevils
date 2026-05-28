@@ -21,6 +21,9 @@ import httpx
 from bs4 import BeautifulSoup
 from langdetect import detect
 
+import tweet_drafter
+import x_stream
+
 # ─── Logging ────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +44,20 @@ WEBHOOKS = {
     "bundesliga": os.environ.get("BUNDESLIGA_WEBHOOK", ""),
     "ligue_1": os.environ.get("LIGUE_1_WEBHOOK", ""),
     "other": os.environ.get("OTHER_LEAGUES_WEBHOOK", ""),
+    "tweet_drafts": os.environ.get("TWEET_DRAFTS_WEBHOOK", ""),
+}
+
+X_BEARER_TOKEN = os.environ.get("X_BEARER_TOKEN", "")
+
+# Per-webhook hourly post caps (rolling 1h window).
+HOURLY_CAPS = {
+    "premier_league": 8,
+    "la_liga": 6,
+    "serie_a": 6,
+    "bundesliga": 5,
+    "ligue_1": 5,
+    "other": 6,
+    "tweet_drafts": 15,
 }
 
 LEAGUE_CLUBS = {
@@ -128,6 +145,37 @@ SEARCH_QUERIES = [
     "Al Hilal news",
 ]
 
+# Direct RSS feeds from major football outlets — supplement to Google News
+# search. Broken feeds (O Jogo, SofaScore, Squawka) intentionally omitted;
+# L'Équipe and Calciomercato use working endpoints.
+RSS_SOURCES: list[dict] = [
+    {"name": "BBC Sport Football", "url": "https://feeds.bbci.co.uk/sport/football/rss.xml"},
+    {"name": "Guardian Football", "url": "https://www.theguardian.com/football/rss"},
+    {"name": "Sky Sports Football", "url": "https://www.skysports.com/rss/12040"},
+    {"name": "Independent Football", "url": "https://www.independent.co.uk/sport/football/rss"},
+    {"name": "ESPN FC", "url": "https://www.espn.com/espn/rss/soccer/news"},
+    {"name": "Goal.com", "url": "https://www.goal.com/feeds/news?fmt=rss"},
+    {"name": "Football365", "url": "https://www.football365.com/feed"},
+    {"name": "Daily Mail Football", "url": "https://www.dailymail.co.uk/sport/football/index.rss"},
+    {"name": "Telegraph Football", "url": "https://www.telegraph.co.uk/football/rss.xml"},
+    {"name": "Manchester Evening News", "url": "https://www.manchestereveningnews.co.uk/sport/football/?service=rss"},
+    {"name": "Liverpool Echo", "url": "https://www.liverpoolecho.co.uk/sport/football/liverpool-fc/?service=rss"},
+    {"name": "L'Équipe", "url": "https://dwh.lequipe.fr/api/edito/rss?path=/Football/"},
+    {"name": "RMC Sport", "url": "https://rmcsport.bfmtv.com/rss/football/"},
+    {"name": "Get French Football News", "url": "https://www.getfootballnewsfrance.com/feed/"},
+    {"name": "Marca (EN)", "url": "https://e00-marca.uecdn.es/rss/en/football/barcelona.xml"},
+    {"name": "AS (EN)", "url": "https://en.as.com/rss/an/portada.xml"},
+    {"name": "Football España", "url": "https://www.football-espana.net/feed"},
+    {"name": "Get Spanish Football News", "url": "https://www.getfootballnewsspain.com/feed/"},
+    {"name": "Calciomercato", "url": "https://www.calciomercato.com/rss"},
+    {"name": "Football Italia", "url": "https://football-italia.net/feed/"},
+    {"name": "Tuttomercatoweb", "url": "https://www.tuttomercatoweb.com/rss"},
+    {"name": "Get Italian Football News", "url": "https://www.getfootballnewsitaly.com/feed/"},
+    {"name": "Bavarian Football Works", "url": "https://www.bavarianfootballworks.com/rss/current"},
+    {"name": "Get German Football News", "url": "https://www.getfootballnewsgermany.com/feed/"},
+]
+
+
 LEAGUE_COLORS = {
     "premier_league": 0x3D195B,   # Purple
     "la_liga": 0xFF4500,           # Orange-red
@@ -195,11 +243,42 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
             article_count INTEGER DEFAULT 1
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS post_log (
+            webhook_key TEXT,
+            posted_at INTEGER
+        )
+    """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_fetched ON articles(fetched_at)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cluster ON articles(cluster_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_league ON articles(league)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_post_log ON post_log(webhook_key, posted_at)")
     conn.commit()
     return conn
+
+
+# ─── Hourly caps ─────────────────────────────────────────────────────────────
+def hourly_cap_available(conn: sqlite3.Connection, key: str) -> bool:
+    cap = HOURLY_CAPS.get(key)
+    if cap is None:
+        return True
+    cutoff = int(time.time()) - 3600
+    count = conn.execute(
+        "SELECT COUNT(*) FROM post_log WHERE webhook_key=? AND posted_at>?",
+        (key, cutoff),
+    ).fetchone()[0]
+    return count < cap
+
+
+def hourly_cap_record(conn: sqlite3.Connection, key: str) -> None:
+    conn.execute(
+        "INSERT INTO post_log(webhook_key, posted_at) VALUES (?, ?)",
+        (key, int(time.time())),
+    )
+    # Prune entries older than 2h to keep the table tiny.
+    conn.execute("DELETE FROM post_log WHERE posted_at < ?",
+                 (int(time.time()) - 7200,))
+    conn.commit()
 
 
 # ─── Feed Fetching ────────────────────────────────────────────────────────────
@@ -226,6 +305,30 @@ async def fetch_feed(client: httpx.AsyncClient, query: str) -> list[dict]:
         return items
     except Exception as e:
         log.warning(f"Feed fetch failed for '{query}': {e}")
+        return []
+
+
+async def fetch_rss(client: httpx.AsyncClient, source: dict) -> list[dict]:
+    """Fetch a direct RSS feed (non-Google-News). Returns parsed items."""
+    try:
+        resp = await client.get(source["url"], timeout=15)
+        resp.raise_for_status()
+        feed = feedparser.parse(resp.text)
+        items = []
+        for entry in feed.entries[:15]:
+            url = entry.get("link", "")
+            title = entry.get("title", "")
+            if not url or not title:
+                continue
+            items.append({
+                "title": title,
+                "url": url,
+                "source": source["name"],
+                "published": entry.get("published_parsed"),
+            })
+        return items
+    except Exception as e:
+        log.warning(f"RSS fetch failed for {source['name']}: {e}")
         return []
 
 
@@ -509,6 +612,11 @@ async def process_article(
         log.debug(f"Cluster already posted, skipping: {title_en[:60]}")
         return
 
+    # Hourly cap — breaking (urgency 5) bypasses the cap.
+    if urgency < 5 and not hourly_cap_available(conn, league):
+        log.info(f"Hourly cap hit for {league} — skipping: {title_en[:60]}")
+        return
+
     # Post to Discord
     webhook_url = WEBHOOKS.get(league, WEBHOOKS.get("other", ""))
     article_data = {
@@ -530,13 +638,16 @@ async def process_article(
     if posted:
         conn.execute("UPDATE articles SET posted=1 WHERE id=?", (aid,))
         conn.commit()
+        hourly_cap_record(conn, league)
 
 
 async def run_poll_cycle(
     client: httpx.AsyncClient, conn: sqlite3.Connection
 ) -> None:
-    log.info(f"Starting poll cycle — {len(SEARCH_QUERIES)} queries")
+    log.info(f"Starting poll cycle — {len(SEARCH_QUERIES)} queries, "
+             f"{len(RSS_SOURCES)} RSS feeds")
     tasks = [fetch_feed(client, q) for q in SEARCH_QUERIES]
+    tasks += [fetch_rss(client, s) for s in RSS_SOURCES]
     results = await asyncio.gather(*tasks)
 
     all_items = []
@@ -560,6 +671,16 @@ async def run_poll_cycle(
     log.info("Poll cycle complete")
 
 
+async def poll_loop(client: httpx.AsyncClient, conn: sqlite3.Connection) -> None:
+    while True:
+        try:
+            await run_poll_cycle(client, conn)
+        except Exception as e:
+            log.error(f"Poll cycle error: {e}", exc_info=True)
+        log.info(f"Sleeping {POLL_INTERVAL}s until next poll...")
+        await asyncio.sleep(POLL_INTERVAL)
+
+
 async def main():
     log.info("⚽ Football Ops Alert Bot starting...")
 
@@ -568,7 +689,7 @@ async def main():
         return
 
     webhook_count = sum(1 for v in WEBHOOKS.values() if v)
-    log.info(f"Configured {webhook_count}/6 Discord webhooks")
+    log.info(f"Configured {webhook_count}/{len(WEBHOOKS)} Discord webhooks")
 
     conn = init_db()
     log.info(f"Database initialised: {DB_PATH}")
@@ -579,14 +700,31 @@ async def main():
     }
 
     async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
-        while True:
-            try:
-                await run_poll_cycle(client, conn)
-            except Exception as e:
-                log.error(f"Poll cycle error: {e}", exc_info=True)
+        tasks = [asyncio.create_task(poll_loop(client, conn))]
 
-            log.info(f"Sleeping {POLL_INTERVAL}s until next poll...")
-            await asyncio.sleep(POLL_INTERVAL)
+        drafts_webhook = WEBHOOKS.get("tweet_drafts", "")
+        if X_BEARER_TOKEN and drafts_webhook:
+            tweet_queue: asyncio.Queue = asyncio.Queue(maxsize=500)
+            loop = asyncio.get_running_loop()
+            try:
+                x_stream.start_stream(X_BEARER_TOKEN, loop, tweet_queue)
+                log.info(f"X filtered stream started — "
+                         f"{len(x_stream.JOURNALISTS)} handles")
+                tasks.append(asyncio.create_task(tweet_drafter.consume_stream(
+                    tweet_queue,
+                    claude_client,
+                    client,
+                    drafts_webhook,
+                    hourly_cap_check=lambda k: hourly_cap_available(conn, k),
+                    hourly_cap_record=lambda k: hourly_cap_record(conn, k),
+                )))
+            except Exception as e:
+                log.error(f"Failed to start X stream: {e}", exc_info=True)
+        else:
+            log.info("X stream disabled (X_BEARER_TOKEN or "
+                     "TWEET_DRAFTS_WEBHOOK missing)")
+
+        await asyncio.gather(*tasks)
 
 
 if __name__ == "__main__":
