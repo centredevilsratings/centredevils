@@ -304,7 +304,7 @@ async def fetch_feed(client: httpx.AsyncClient, query: str) -> list[dict]:
                 items.append(item)
         return items
     except Exception as e:
-        log.warning(f"Feed fetch failed for '{query}': {e}")
+        log.warning(f"Feed fetch failed for '{query}': {type(e).__name__}: {e}")
         return []
 
 
@@ -328,7 +328,7 @@ async def fetch_rss(client: httpx.AsyncClient, source: dict) -> list[dict]:
             })
         return items
     except Exception as e:
-        log.warning(f"RSS fetch failed for {source['name']}: {e}")
+        log.warning(f"RSS fetch failed for {source['name']}: {type(e).__name__}: {e}")
         return []
 
 
@@ -605,11 +605,11 @@ async def process_article(
 
     # Skip low-value or already-posted clusters
     if urgency < 2 and uniqueness < 2:
-        log.debug(f"Skipping low-value article: {title_en[:60]}")
+        log.info(f"SKIP low-value (u={urgency} q={uniqueness}) {league}: {title_en[:80]}")
         return
 
-    if already_posted and urgency < 4:
-        log.debug(f"Cluster already posted, skipping: {title_en[:60]}")
+    if already_posted and urgency < 3:
+        log.info(f"SKIP cluster-dup (u={urgency}) {league}: {title_en[:80]}")
         return
 
     # Hourly cap — breaking (urgency 5) bypasses the cap.
@@ -699,10 +699,17 @@ async def main():
         "Accept-Language": "en-GB,en;q=0.9",
     }
 
+    drafts_webhook = WEBHOOKS.get("tweet_drafts", "")
+    log.info("=" * 60)
+    log.info(f"X_BEARER_TOKEN set:      {'YES' if X_BEARER_TOKEN else 'NO'}")
+    log.info(f"TWEET_DRAFTS_WEBHOOK set: {'YES' if drafts_webhook else 'NO'}")
+    log.info(f"League webhooks set:     "
+             f"{sum(1 for k,v in WEBHOOKS.items() if k != 'tweet_drafts' and v)}/6")
+    log.info("=" * 60)
+
     async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
         tasks = [asyncio.create_task(poll_loop(client, conn))]
 
-        drafts_webhook = WEBHOOKS.get("tweet_drafts", "")
         if X_BEARER_TOKEN and drafts_webhook:
             tweet_queue: asyncio.Queue = asyncio.Queue(maxsize=500)
             loop = asyncio.get_running_loop()
