@@ -146,32 +146,23 @@ SEARCH_QUERIES = [
 ]
 
 # Direct RSS feeds from major football outlets — supplement to Google News
-# search. Broken feeds (O Jogo, SofaScore, Squawka) intentionally omitted;
-# L'Équipe and Calciomercato use working endpoints.
+# search. Pruned to known-working endpoints; dead/blocked feeds removed
+# (Goal.com, Football365, AS, Calciomercato, Daily Mail, Get French,
+# Liverpool Echo, Bavarian Football Works, Football Italia, Tuttomercatoweb,
+# Football España, O Jogo, SofaScore, Squawka).
 RSS_SOURCES: list[dict] = [
     {"name": "BBC Sport Football", "url": "https://feeds.bbci.co.uk/sport/football/rss.xml"},
     {"name": "Guardian Football", "url": "https://www.theguardian.com/football/rss"},
     {"name": "Sky Sports Football", "url": "https://www.skysports.com/rss/12040"},
     {"name": "Independent Football", "url": "https://www.independent.co.uk/sport/football/rss"},
     {"name": "ESPN FC", "url": "https://www.espn.com/espn/rss/soccer/news"},
-    {"name": "Goal.com", "url": "https://www.goal.com/feeds/news?fmt=rss"},
-    {"name": "Football365", "url": "https://www.football365.com/feed"},
-    {"name": "Daily Mail Football", "url": "https://www.dailymail.co.uk/sport/football/index.rss"},
     {"name": "Telegraph Football", "url": "https://www.telegraph.co.uk/football/rss.xml"},
     {"name": "Manchester Evening News", "url": "https://www.manchestereveningnews.co.uk/sport/football/?service=rss"},
-    {"name": "Liverpool Echo", "url": "https://www.liverpoolecho.co.uk/sport/football/liverpool-fc/?service=rss"},
     {"name": "L'Équipe", "url": "https://dwh.lequipe.fr/api/edito/rss?path=/Football/"},
     {"name": "RMC Sport", "url": "https://rmcsport.bfmtv.com/rss/football/"},
-    {"name": "Get French Football News", "url": "https://www.getfootballnewsfrance.com/feed/"},
     {"name": "Marca (EN)", "url": "https://e00-marca.uecdn.es/rss/en/football/barcelona.xml"},
-    {"name": "AS (EN)", "url": "https://en.as.com/rss/an/portada.xml"},
-    {"name": "Football España", "url": "https://www.football-espana.net/feed"},
-    {"name": "Get Spanish Football News", "url": "https://www.getfootballnewsspain.com/feed/"},
-    {"name": "Calciomercato", "url": "https://www.calciomercato.com/rss"},
-    {"name": "Football Italia", "url": "https://football-italia.net/feed/"},
-    {"name": "Tuttomercatoweb", "url": "https://www.tuttomercatoweb.com/rss"},
+    {"name": "Get Spanish Football News", "url": "https://getfootballnewsspain.com/feed/"},
     {"name": "Get Italian Football News", "url": "https://www.getfootballnewsitaly.com/feed/"},
-    {"name": "Bavarian Football Works", "url": "https://www.bavarianfootballworks.com/rss/current"},
     {"name": "Get German Football News", "url": "https://www.getfootballnewsgermany.com/feed/"},
 ]
 
@@ -253,8 +244,35 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cluster ON articles(cluster_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_league ON articles(league)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_post_log ON post_log(webhook_key, posted_at)")
+
+    _ensure_columns(conn, "articles", {
+        "title_original": "TEXT",
+        "title_en": "TEXT",
+        "summary_en": "TEXT",
+        "source": "TEXT",
+        "published_at": "INTEGER",
+        "fetched_at": "INTEGER",
+        "language": "TEXT",
+        "league": "TEXT",
+        "club": "TEXT",
+        "urgency": "INTEGER",
+        "uniqueness": "INTEGER",
+        "cluster_id": "TEXT",
+        "posted": "INTEGER DEFAULT 0",
+    })
+
     conn.commit()
     return conn
+
+
+def _ensure_columns(conn: sqlite3.Connection, table: str,
+                    expected: dict[str, str]) -> None:
+    """Add any missing columns to an existing table (forward migration)."""
+    existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    for col, ddl in expected.items():
+        if col not in existing:
+            log.info(f"Schema migration: ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
 
 
 # ─── Hourly caps ─────────────────────────────────────────────────────────────
