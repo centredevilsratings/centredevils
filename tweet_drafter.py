@@ -68,6 +68,39 @@ RECENCY RULES — CRITICAL, READ CAREFULLY:
 - If you cannot find a clear recency anchor in the source text, do not use BREAKING or JUST IN. Downgrade to "NEW" or null label and hedge the wording ("reportedly", "according to reports").
 - A bid/transfer/injury described in past tense without a date is a red flag for recycled news — prefer skip=true over guessing.
 
+SPECIFICITY RULES — CRITICAL:
+The whole point of CentreGoals is to be the FASTEST, MOST DENSE source of football facts. Generic statements waste the reader's time. Every draft must carry at least one concrete data point from the source. If the source has no concrete data, prefer skip=true over a vague draft.
+
+REQUIRED — at least ONE of these must appear in line1_template or context:
+- Transfer fee in €/£/$ (e.g. "€60m", "£25m + £5m add-ons")
+- Contract length / expiry year (e.g. "5-year deal", "until 2029")
+- Loan terms (e.g. "loan with €25m option to buy")
+- Injury type + duration (e.g. "ACL — out 6 months", "hamstring — 3 weeks")
+- Specific medical / signing date (e.g. "medical Monday", "signs Tuesday")
+- Salary / wage figure
+- Release clause amount
+- Concrete clubs involved (e.g. "from Bayer Leverkusen", "from Sporting")
+- Specific scoreline / match impact (e.g. "will miss CL final")
+- Named decision-makers ("Berta pushing", "INEOS approved")
+
+BANNED filler phrases — if your draft would contain anything like these, rewrite or skip:
+- "signals their intent"
+- "in the transfer market"
+- "could be set for a move"
+- "interest in the player"
+- "as they look to strengthen"
+- "ahead of the new season"
+- "the Argentine/English/etc striker" (when no other info)
+- "the Gunners' / Reds' / Blues' initial offer" (when nothing follows)
+- Any sentence that, if removed, the reader loses zero information.
+
+If the only thing you have is "Club X interested in Player Y" with no fee, no timeline, no source-named decision-maker, no contract terms — set skip=true. That is too thin.
+
+Context sentence rules:
+- Must add a DIFFERENT specific fact from line 1 (don't restate the headline).
+- Acceptable contents: fee breakdown, contract length, alternative target, rival club bidding, medical date, source name (e.g. "per @FabrizioRomano"), squad-impact detail.
+- If you cannot add a specific second fact, set context to null. Do not pad.
+
 FEW-SHOT EXAMPLES (study these — these are the EXACT voice to match):
 
 Source: "🚨 Neymar suffered a muscle injury during training today. Brazilian FA confirms he'll be out 2-3 weeks after scans. Will miss pre-WC friendlies and possibly the Morocco opener."
@@ -82,13 +115,17 @@ Source: "Pochettino set to leave USA Men's National Team job after the World Cup
 Output:
 {"skip": false, "label": "JUST IN", "line1_template": "Mauricio Pochettino will {{KEY}} USA National Team after the World Cup.", "key_fact": "LEAVE", "emoji_flag": "👋🇺🇸", "context": "He has been offered to AC Milan by an intermediary in the last hours."}
 
-Source: "🚨 Marcus Rashford to Barcelona, here we go! Loan deal until end of season with €25m option to buy. Documents being signed."
+Source: "🚨 Marcus Rashford to Barcelona, here we go! Loan deal until end of season with €25m option to buy and €5m loan fee. Medical scheduled for Monday in Barcelona."
 Output:
-{"skip": false, "label": "BREAKING", "line1_template": "Marcus Rashford to Barcelona, {{KEY}}!", "key_fact": "HERE WE GO", "emoji_flag": "✅🏴󠁬󠁧󠁢󠁥󠁮󠁧󠁿", "context": "Loan deal until end of season with €25m option to buy."}
+{"skip": false, "label": "BREAKING", "line1_template": "Marcus Rashford to Barcelona, {{KEY}}!", "key_fact": "HERE WE GO", "emoji_flag": "✅🏴󠁬󠁧󠁢󠁥󠁮󠁧󠁿", "context": "Loan with €5m fee + €25m option to buy. Medical Monday in Barcelona."}
 
-Source: "Headline: Real Madrid eyeing Hincapie move ahead of Arsenal. Summary: Real Madrid have entered the race for Leverkusen's Piero Hincapie, with the Ecuador defender open to a switch."
+Source: "Headline: Real Madrid eyeing Hincapié move ahead of Arsenal. Summary: Real Madrid have made initial contact about Leverkusen's Piero Hincapié, with release clause set at €60m and Ecuador defender keen on the move. Florentino Pérez pushing the deal."
 Output:
-{"skip": false, "label": "NEW", "line1_template": "Real Madrid are {{KEY}} a move for Piero Hincapié ahead of Arsenal.", "key_fact": "EYEING", "emoji_flag": "👀🇪🇨", "context": "The Ecuadorian defender is open to a switch from Leverkusen."}
+{"skip": false, "label": "NEW", "line1_template": "Real Madrid contact Leverkusen over Piero Hincapié, {{KEY}} of €60m.", "key_fact": "RELEASE CLAUSE", "emoji_flag": "👀🇪🇨", "context": "Defender keen on switch. Florentino Pérez pushing — Arsenal also tracking."}
+
+Source: "Headline: Chelsea showing interest in Hincapie. Summary: Chelsea are reportedly keen on Bayer Leverkusen's Piero Hincapie as they look to strengthen at the back ahead of the new season."
+Output:
+{"skip": true, "label": null, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null}
 
 Source: "Just listened to the new pod with the boys, hilarious stuff on Mourinho's return. Link below 👇"
 Output:
@@ -100,7 +137,7 @@ Output:
 """
 
 
-MAX_LEN = 240
+MAX_LEN = 280
 
 
 def _build_draft(parsed: dict, handle: str) -> Optional[str]:
