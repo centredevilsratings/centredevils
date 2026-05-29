@@ -49,7 +49,8 @@ DRAFTER_SYSTEM = """You draft CentreGoals tweets — concise, breaking-style foo
   "line1_template": "Sentence with the key fact replaced by the literal token {{KEY}}. Max ~120 chars including the placeholder.",
   "key_fact": "1-3 WORD KEY FACT in UPPERCASE ASCII letters/digits/spaces only (e.g. MUSCLE INJURY, DONE DEAL, SACKED, LEAVE, RETIRING, HERE WE GO, AGREED, SIGNED). No punctuation.",
   "emoji_flag": "Exactly one reaction emoji + one country flag emoji matching the story. Examples: 🤕🇧🇷 (injury), 👋🇺🇸 (departure), ✅🏴󠁧󠁢󠁥󠁮󠁧󠁿 (signing/England), 🏆 (trophy). Empty string only if truly unclear.",
-  "context": "Optional single sentence adding ONE key follow-up detail (≤ 110 chars), or null."
+  "context": "Optional single sentence adding ONE key follow-up detail (≤ 110 chars), or null.",
+  "attribution_handle": "If the source tweet credits a different journalist/outlet as the original reporter (e.g. 'via @FabrizioRomano', 'per @David_Ornstein', '🚨 @DiMarzio reports'), put that handle here WITHOUT the @ (e.g. 'FabrizioRomano'). Otherwise null — we'll attribute to the original poster."
 }
 
 VOICE RULES:
@@ -101,6 +102,11 @@ Context sentence rules:
 - Acceptable contents: fee breakdown, contract length, alternative target, rival club bidding, medical date, source name (e.g. "per @FabrizioRomano"), squad-impact detail.
 - If you cannot add a specific second fact, set context to null. Do not pad.
 
+ATTRIBUTION RULES — aggregator passthrough:
+The source tweet may come from an aggregator account that is RELAYING someone else's reporting. Known aggregators include: @TouchlineX, @DeadlineDayLive, @AlbicelesteTalk, @brfootball, @OneFootball, @BeFootball, @eurofootcom, @MadridZone, @MadridXtra, @ManagingBarca, @ATMUniverse, @PSGINT_, @iMiaSanMia, @AlNassrZone, @TotalCristiano, @mufcMPB, @ActuFoot_, @vibesfoot, @ActuSPL.
+If the source tweet body credits another journalist or outlet — patterns like "via @X", "per @X", "🚨 @X reports", "(@X)", "[@X]", "source: @X", "according to @X", "@X:", "X reports" — set attribution_handle to that credited handle (without the @). That's the real reporter; the aggregator is just the loudspeaker.
+If no credit is given in the body, leave attribution_handle null.
+
 FEW-SHOT EXAMPLES (study these — these are the EXACT voice to match):
 
 Source: "🚨 Neymar suffered a muscle injury during training today. Brazilian FA confirms he'll be out 2-3 weeks after scans. Will miss pre-WC friendlies and possibly the Morocco opener."
@@ -126,6 +132,14 @@ Output:
 Source: "Headline: Chelsea showing interest in Hincapie. Summary: Chelsea are reportedly keen on Bayer Leverkusen's Piero Hincapie as they look to strengthen at the back ahead of the new season."
 Output:
 {"skip": true, "label": null, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null}
+
+Source tweet by @TouchlineX: "🚨 NEW: Manchester United have reached full agreement with RB Leipzig for Xavi Simons. €70m total package, 5-year deal. Medical scheduled for tomorrow. Via @FabrizioRomano 🔴"
+Output:
+{"skip": false, "label": "BREAKING", "line1_template": "Manchester United reach full agreement with RB Leipzig for Xavi Simons, {{KEY}}!", "key_fact": "DONE DEAL", "emoji_flag": "✅🔴", "context": "€70m total package, 5-year deal. Medical scheduled for tomorrow.", "attribution_handle": "FabrizioRomano"}
+
+Source tweet by @MadridZone: "🚨 Real Madrid have submitted a €60m bid for Piero Hincapié. Leverkusen want closer to €75m. Per @MatteMoretto."
+Output:
+{"skip": false, "label": "JUST IN", "line1_template": "Real Madrid submit {{KEY}} for Piero Hincapié, Leverkusen holding out.", "key_fact": "€60M BID", "emoji_flag": "👀🇪🇨", "context": "Leverkusen want closer to €75m for the Ecuadorian defender.", "attribution_handle": "MatteMoretto"}
 
 Source: "Just listened to the new pod with the boys, hilarious stuff on Mourinho's return. Link below 👇"
 Output:
@@ -160,7 +174,9 @@ def _build_draft(parsed: dict, handle: str) -> Optional[str]:
     if label in ("BREAKING", "JUST IN", "NEW"):
         prefix += f"{label}: "
 
-    attribution = f"[@{handle}]"
+    override = (parsed.get("attribution_handle") or "").strip().lstrip("@")
+    final_handle = override if override else handle
+    attribution = f"[@{final_handle}]"
 
     parts = [prefix + line1]
     if context:
