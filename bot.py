@@ -415,6 +415,35 @@ def _looks_operational(title: str) -> bool:
     return any(kw in t for kw in _OPS_KEYWORDS)
 
 
+# Allowlist of trusted publications for the news-tweets draft pipeline.
+# Anything outside this set still gets posted to the league channel as an
+# embed (where the source is visible) but is NOT auto-drafted, because
+# low-tier aggregators (nowarsenal, sportbible, fan blogs) routinely
+# recycle old news with breaking-style headlines.
+_TRUSTED_DRAFT_SOURCES = (
+    "bbc", "guardian", "sky sports", "sky sport", "independent",
+    "espn", "telegraph", "athletic", "times", "reuters", "ap news",
+    "associated press", "afp",
+    "fabrizio romano", "ornstein", "di marzio", "schira", "plettenberg",
+    "l'équipe", "lequipe", "rmc", "le parisien", "france football",
+    "marca", "as.com", "diario as", "mundo deportivo", "sport.es",
+    "relevo",
+    "gazzetta", "tuttosport", "corriere dello sport", "calciomercato",
+    "football italia", "tuttomercatoweb",
+    "bild", "kicker", "sport bild",
+    "manchester evening news", "liverpool echo",
+    "getfootballnews", "get french football news",
+    "get spanish football news", "get italian football news",
+    "get german football news",
+    "goal.com",
+)
+
+
+def _is_trusted_for_drafts(source: str) -> bool:
+    s = (source or "").lower()
+    return any(kw in s for kw in _TRUSTED_DRAFT_SOURCES)
+
+
 # ─── League Detection ─────────────────────────────────────────────────────────
 def detect_league(text: str) -> tuple[str, str]:
     """Return (league_key, matched_club)."""
@@ -654,9 +683,10 @@ async def process_article(
     tags = result.get("tags", [])
 
     # Fire CentreGoals draft for the news-tweets channel — immediately, no
-    # cap, no clustering. The drafter itself filters out non-actionable items.
+    # cap, no clustering. Only fire if the source is in the trusted allowlist
+    # (avoids drafting clickbait from low-tier aggregators).
     drafts_webhook = WEBHOOKS.get("tweet_drafts", "")
-    if drafts_webhook and urgency >= 2:
+    if drafts_webhook and urgency >= 2 and _is_trusted_for_drafts(source):
         asyncio.create_task(_draft_article_to_webhook(
             client, drafts_webhook, title_en, summary_en, source, url,
         ))
