@@ -453,7 +453,7 @@ Body: {body[:2500]}
 Analyse and return JSON."""
     try:
         msg = claude_client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-opus-4-7",
             max_tokens=600,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],

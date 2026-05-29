@@ -153,7 +153,7 @@ def draft_tweet(claude: anthropic.Anthropic, source_text: str,
     )
     try:
         msg = claude.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-opus-4-7",
             max_tokens=400,
             system=DRAFTER_SYSTEM,
             messages=[{"role": "user", "content": user_msg}],
