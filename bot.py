@@ -45,9 +45,24 @@ WEBHOOKS = {
     "ligue_1": os.environ.get("LIGUE_1_WEBHOOK", ""),
     "other": os.environ.get("OTHER_LEAGUES_WEBHOOK", ""),
     "tweet_drafts": os.environ.get("TWEET_DRAFTS_WEBHOOK", ""),
+    "man_utd": os.environ.get("MAN_UTD_WEBHOOK", ""),
 }
 
 X_BEARER_TOKEN = os.environ.get("X_BEARER_TOKEN", "")
+
+# Per-club webhook routes. Set the env var on Render (e.g. MAN_UTD_WEBHOOK)
+# to enable a club-specific channel — articles matching that club go there
+# instead of the league channel. Falls back to the league channel if the
+# club's env var isn't set.
+CLUB_ROUTES = {
+    "man_utd": {
+        "aliases": ("Man Utd", "Manchester United", "Man United", "MUFC", "Red Devils"),
+        "label": "Manchester United",
+        "emoji": "🔴",
+        "league": "premier_league",
+        "cap": 12,
+    },
+}
 
 # Per-webhook hourly post caps (rolling 1h window).
 # tweet_drafts is intentionally uncapped — every actionable item should land
@@ -202,6 +217,29 @@ URGENCY_COLORS = {
     4: 0xE74C3C,  # Red - high
     5: 0xFF0000,  # Bright red - breaking
 }
+
+
+# Plug each configured club route into the existing label/emoji/cap maps
+# so the rest of the code (embed builder, hourly caps) treats them like
+# any other route.
+for _route_key, _cfg in CLUB_ROUTES.items():
+    LEAGUE_LABELS[_route_key] = _cfg["label"]
+    LEAGUE_EMOJIS[_route_key] = _cfg["emoji"]
+    HOURLY_CAPS[_route_key] = _cfg["cap"]
+
+
+def route_for(league: str, club: str) -> str:
+    """If the matched club has its own webhook configured, route there.
+    Otherwise fall back to the league route."""
+    if not club:
+        return league
+    club_lower = club.lower()
+    for route_key, cfg in CLUB_ROUTES.items():
+        if not WEBHOOKS.get(route_key):
+            continue
+        if any(a.lower() == club_lower for a in cfg["aliases"]):
+            return route_key
+    return league
 
 
 # ─── Database ────────────────────────────────────────────────────────────────
@@ -763,13 +801,17 @@ async def process_article(
         log.info(f"SKIP cluster-dup (u={urgency}) {league}: {title_en[:80]}")
         return
 
+    # Resolve actual webhook route — clubs with their own webhook (e.g.
+    # MAN_UTD_WEBHOOK) override the league channel.
+    route = route_for(league, club)
+
     # Hourly cap — breaking (urgency 5) bypasses the cap.
-    if urgency < 5 and not hourly_cap_available(conn, league):
-        log.info(f"Hourly cap hit for {league} — skipping: {title_en[:60]}")
+    if urgency < 5 and not hourly_cap_available(conn, route):
+        log.info(f"Hourly cap hit for {route} — skipping: {title_en[:60]}")
         return
 
     # Post to Discord
-    webhook_url = WEBHOOKS.get(league, WEBHOOKS.get("other", ""))
+    webhook_url = WEBHOOKS.get(route, WEBHOOKS.get("other", ""))
     article_data = {
         "title_en": title_en,
         "summary_en": summary_en,
@@ -783,13 +825,13 @@ async def process_article(
     }
 
     posted = await post_discord_embed(
-        client, webhook_url, article_data, league, cluster_size
+        client, webhook_url, article_data, route, cluster_size
     )
 
     if posted:
         conn.execute("UPDATE articles SET posted=1 WHERE id=?", (aid,))
         conn.commit()
-        hourly_cap_record(conn, league)
+        hourly_cap_record(conn, route)
 
 
 async def run_poll_cycle(
