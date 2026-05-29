@@ -371,8 +371,8 @@ async def extract_article_text(client: httpx.AsyncClient, url: str) -> str:
             paragraphs = soup.find_all("p")
             text = " ".join(p.get_text(strip=True) for p in paragraphs)
 
-        # Truncate to 3000 chars for API efficiency
-        return text[:3000].strip()
+        # Truncate to 1500 chars for API cost efficiency
+        return text[:1500].strip()
     except Exception as e:
         log.debug(f"Article extraction failed for {url}: {e}")
         return ""
@@ -386,6 +386,33 @@ def article_id(url: str) -> str:
 def is_duplicate(conn: sqlite3.Connection, url: str) -> bool:
     row = conn.execute("SELECT id FROM articles WHERE url = ?", (url,)).fetchone()
     return row is not None
+
+
+# ─── Cheap title pre-filter ──────────────────────────────────────────────────
+_OPS_KEYWORDS = (
+    "transfer", "sign", "signed", "signing", "deal", "agree", "agreed",
+    "agreement", "move", "loan", "bid", "offer", "fee", "contract",
+    "extend", "extension", "renew", "renewal", "release", "released",
+    "free agent",
+    "sack", "sacked", "fire", "fired", "dismiss", "dismissed", "axe",
+    "resign", "step down", "exit", "leave", "leaves", "leaving", "depart",
+    "return", "returns", "back to",
+    "retire", "retires", "retiring", "retirement",
+    "appoint", "appointed", "hire", "hired", "named", "new manager",
+    "new head coach", "new boss", "new coach",
+    "injury", "injured", "knock", "surgery", "out for", "ruled out",
+    "miss", "misses", "missed", "fit", "unfit", "doubt", "recover",
+    "recall", "recalled", "drop", "dropped",
+    "ban", "banned", "suspension", "suspended",
+    "ownership", "takeover", "owner", "buy", "bought", "sale",
+    "captain", "vice-captain",
+    "here we go", "done deal", "breaking", "just in", "exclusive",
+)
+
+
+def _looks_operational(title: str) -> bool:
+    t = title.lower()
+    return any(kw in t for kw in _OPS_KEYWORDS)
 
 
 # ─── League Detection ─────────────────────────────────────────────────────────
@@ -484,12 +511,12 @@ Do NOT wrap in markdown. Output raw JSON only."""
 def process_with_claude(title: str, body: str, source_lang: str) -> Optional[dict]:
     prompt = f"""Title: {title}
 Source language: {source_lang}
-Body: {body[:2500]}
+Body: {body[:1200]}
 
 Analyse and return JSON."""
     try:
         msg = claude_client.messages.create(
-            model="claude-opus-4-7",
+            model="claude-haiku-4-5-20251001",
             max_tokens=600,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
@@ -593,6 +620,13 @@ async def process_article(
 
     # Skip old articles (> 6 hours)
     if now - pub_ts > CLUSTER_WINDOW:
+        return
+
+    # Cheap pre-filter: skip the Claude call entirely if the headline shows
+    # no sign of being operational football news. Saves a Claude call on
+    # every "5 things we learned" / "tactical analysis" / match preview.
+    if not _looks_operational(title):
+        log.info(f"SKIP non-operational: {title[:80]}")
         return
 
     # Extract article body
