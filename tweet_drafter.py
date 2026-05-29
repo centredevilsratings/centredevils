@@ -73,6 +73,17 @@ RECENCY RULES — CRITICAL, READ CAREFULLY:
 SPECIFICITY RULES — CRITICAL:
 The whole point of CentreGoals is to be the FASTEST, MOST DENSE source of football facts. Generic statements waste the reader's time. Every draft must carry at least one concrete data point from the source. If the source has no concrete data, prefer skip=true over a vague draft.
 
+NO-FABRICATION RULE — ABSOLUTE:
+- You may ONLY use facts that appear in the source text. NEVER invent fees, contract lengths, dates, ages, nationalities, decision-makers, rival clubs, medical dates, or any other detail that is not literally present in the source.
+- If a fact is uncertain or paraphrased in the source ("reportedly", "claims", "according to"), hedge in your draft ("reportedly", "per reports").
+- If you find yourself wanting to write something that "sounds plausible" but isn't in the source — stop and either drop that detail or set skip=true.
+
+"HERE WE GO" RULE — STRICTEST, READ TWICE:
+"HERE WE GO" is the trademarked catchphrase of Fabrizio Romano (@FabrizioRomano). You may ONLY use it as the key_fact if BOTH of these conditions hold:
+1. The original source tweet was POSTED BY @FabrizioRomano (or an aggregator explicitly relaying his tweet), AND
+2. The source text LITERALLY contains the phrase "here we go" (case-insensitive) or its emoji shorthand "🤝🟢".
+If either condition fails, you are FORBIDDEN from using "HERE WE GO". Instead use one of: "DONE DEAL", "AGREED", "SIGNED", "CONFIRMED", "COMPLETED". Do not put words in Fabrizio's mouth. Do not let an aggregator's hype phrasing trigger it. If unsure, never "HERE WE GO".
+
 REQUIRED — at least ONE of these must appear in line1_template or context:
 - Transfer fee in €/£/$ (e.g. "€60m", "£25m + £5m add-ons")
 - Contract length / expiry year (e.g. "5-year deal", "until 2029")
@@ -94,6 +105,12 @@ BANNED filler phrases — if your draft would contain anything like these, rewri
 - "ahead of the new season"
 - "the Argentine/English/etc striker" (when no other info)
 - "the Gunners' / Reds' / Blues' initial offer" (when nothing follows)
+- "in talks" (when no specifics given)
+- "monitoring the situation"
+- "weighing up a move"
+- "reportedly keen on" (with no fee, no timeline)
+- "tabled an offer" (with no amount)
+- "preparing a bid" (with no amount or timing)
 - Any sentence that, if removed, the reader loses zero information.
 
 If the only thing you have is "Club X interested in Player Y" with no fee, no timeline, no source-named decision-maker, no contract terms — set skip=true. That is too thin.
@@ -133,6 +150,16 @@ Output:
 Source: "Headline: Chelsea showing interest in Hincapie. Summary: Chelsea are reportedly keen on Bayer Leverkusen's Piero Hincapie as they look to strengthen at the back ahead of the new season."
 Output:
 {"skip": true, "label": null, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null}
+
+Source tweet by @David_Ornstein: "Manchester United have completed signing of Xavi Simons from RB Leipzig on a five-year contract. Total package worth €70m guaranteed plus €5m add-ons."
+Output:
+{"skip": false, "label": "BREAKING", "line1_template": "Manchester United complete the {{KEY}} of Xavi Simons from RB Leipzig.", "key_fact": "SIGNING", "emoji_flag": "✅🔴", "context": "Five-year contract. €70m guaranteed + €5m add-ons.", "attribution_handle": null, "story_id": "xavi-simons-manchester-united-transfer"}
+[NOTE: not Fabrizio, so NO "HERE WE GO" — used "SIGNING" instead.]
+
+Source tweet by @TouchlineX: "Tottenham preparing a bid for Mason Greenwood. Spurs monitoring the situation."
+Output:
+{"skip": true, "label": null, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null}
+[NOTE: no fee, no timeline, no source-named decision-maker — all banned filler phrasing. Skip.]
 
 Source tweet by @TouchlineX: "🚨 NEW: Manchester United have reached full agreement with RB Leipzig for Xavi Simons. €70m total package, 5-year deal. Medical scheduled for tomorrow. Via @FabrizioRomano 🔴"
 Output:
