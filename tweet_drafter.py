@@ -41,11 +41,11 @@ def to_math_bold(s: str) -> str:
 
 
 # ─── Prompting ───────────────────────────────────────────────────────────────
-DRAFTER_SYSTEM = """You draft CentreGoals tweets — concise, breaking-style football news posts in the EXACT CentreGoals voice. Given a source tweet from a journalist or outlet, return ONLY valid JSON with this schema:
+DRAFTER_SYSTEM = """You draft CentreGoals tweets — concise, breaking-style football news posts in the EXACT CentreGoals voice. Given a source tweet from a journalist or outlet (or a news headline + summary), return ONLY valid JSON with this schema:
 
 {
   "skip": <true if the source is not actionable football news (opinion, banter, podcast/video plug, link-only post, retweet, reply, off-topic, multi-item list/ranking) — otherwise false>,
-  "label": "BREAKING" | "JUST IN" | null,
+  "label": "BREAKING" | "JUST IN" | "NEW" | null,
   "line1_template": "Sentence with the key fact replaced by the literal token {{KEY}}. Max ~120 chars including the placeholder.",
   "key_fact": "1-3 WORD KEY FACT in UPPERCASE ASCII letters/digits/spaces only (e.g. MUSCLE INJURY, DONE DEAL, SACKED, LEAVE, RETIRING, HERE WE GO, AGREED, SIGNED). No punctuation.",
   "emoji_flag": "Exactly one reaction emoji + one country flag emoji matching the story. Examples: 🤕🇧🇷 (injury), 👋🇺🇸 (departure), ✅🏴󠁧󠁢󠁥󠁮󠁧󠁿 (signing/England), 🏆 (trophy). Empty string only if truly unclear.",
@@ -55,9 +55,10 @@ DRAFTER_SYSTEM = """You draft CentreGoals tweets — concise, breaking-style foo
 VOICE RULES:
 - "BREAKING" → confirmed transfers, sackings, injuries, retirements, contract signings.
 - "JUST IN" → credible developing/JUST-reported news (not yet officially confirmed).
-- null label → softer secondary/analysis stories.
+- "NEW" → newly surfaced reporting, fresh angles, or notable analysis that isn't quite breaking or just-in.
+- null label → softer secondary stories.
 - key_fact must be the SINGLE most operationally important phrase. Keep it 1-3 words.
-- Common key_fact values: MUSCLE INJURY, ACL INJURY, DONE DEAL, HERE WE GO, AGREED, SIGNED, LEAVE, SACKED, RETIRING, EXTENDS, REJECTED, RECALLED.
+- Common key_fact values: MUSCLE INJURY, ACL INJURY, DONE DEAL, HERE WE GO, AGREED, SIGNED, LEAVE, SACKED, RETIRING, EXTENDS, REJECTED, RECALLED, EYEING, LINKED.
 - NO hashtags. NO markdown around the JSON. NO emojis except those in emoji_flag.
 - skip=true examples: retweets, replies, link-only "see thread below" posts, ranked top-10 lists, opinion takes, podcast/video plugs, off-topic personal posts.
 
@@ -78,6 +79,10 @@ Output:
 Source: "🚨 Marcus Rashford to Barcelona, here we go! Loan deal until end of season with €25m option to buy. Documents being signed."
 Output:
 {"skip": false, "label": "BREAKING", "line1_template": "Marcus Rashford to Barcelona, {{KEY}}!", "key_fact": "HERE WE GO", "emoji_flag": "✅🏴󠁬󠁧󠁢󠁥󠁮󠁧󠁿", "context": "Loan deal until end of season with €25m option to buy."}
+
+Source: "Headline: Real Madrid eyeing Hincapie move ahead of Arsenal. Summary: Real Madrid have entered the race for Leverkusen's Piero Hincapie, with the Ecuador defender open to a switch."
+Output:
+{"skip": false, "label": "NEW", "line1_template": "Real Madrid are {{KEY}} a move for Piero Hincapié ahead of Arsenal.", "key_fact": "EYEING", "emoji_flag": "👀🇪🇨", "context": "The Ecuadorian defender is open to a switch from Leverkusen."}
 
 Source: "Just listened to the new pod with the boys, hilarious stuff on Mourinho's return. Link below 👇"
 Output:
@@ -109,7 +114,7 @@ def _build_draft(parsed: dict, handle: str) -> Optional[str]:
         line1 = f"{line1} {emoji_flag}"
 
     prefix = "🚨🚨| "
-    if label in ("BREAKING", "JUST IN"):
+    if label in ("BREAKING", "JUST IN", "NEW"):
         prefix += f"{label}: "
 
     attribution = f"[@{handle}]"
@@ -141,6 +146,43 @@ def _parse_json(raw: str) -> Optional[dict]:
     except Exception as e:
         log.debug(f"Drafter JSON parse failed: {e} | raw={raw[:200]}")
         return None
+
+
+# Map article source names to plausible X handles for attribution.
+_SOURCE_HANDLE_MAP = {
+    "BBC Sport Football": "BBCSport",
+    "BBC Sport": "BBCSport",
+    "Guardian Football": "guardian_sport",
+    "Sky Sports Football": "SkySportsNews",
+    "Sky Sports": "SkySportsNews",
+    "Independent Football": "Independent",
+    "ESPN FC": "ESPNFC",
+    "ESPN": "ESPNFC",
+    "Telegraph Football": "TeleFootball",
+    "Manchester Evening News": "ManUtdMEN",
+    "L'Équipe": "lequipe",
+    "RMC Sport": "RMCsport",
+    "Marca (EN)": "marca",
+    "Get Spanish Football News": "GFFN_Spain",
+    "Get Italian Football News": "GFFN_Italy",
+    "Get German Football News": "GFFN_Germany",
+}
+
+
+def _source_to_handle(source: str) -> str:
+    if source in _SOURCE_HANDLE_MAP:
+        return _SOURCE_HANDLE_MAP[source]
+    cleaned = source.replace("Football", "").replace("News", "").strip()
+    slug = "".join(c for c in cleaned if c.isalnum())[:20]
+    return slug or "Source"
+
+
+def draft_article(claude: anthropic.Anthropic, title: str, summary: str,
+                  source: str) -> Optional[str]:
+    """Draft a CentreGoals tweet from a news article (title + summary)."""
+    handle = _source_to_handle(source)
+    body = f"Headline: {title}\n\nSummary: {summary}"
+    return draft_tweet(claude, body, handle, source)
 
 
 def draft_tweet(claude: anthropic.Anthropic, source_text: str,

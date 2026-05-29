@@ -50,6 +50,8 @@ WEBHOOKS = {
 X_BEARER_TOKEN = os.environ.get("X_BEARER_TOKEN", "")
 
 # Per-webhook hourly post caps (rolling 1h window).
+# tweet_drafts is intentionally uncapped — every actionable item should land
+# in the drafts channel immediately.
 HOURLY_CAPS = {
     "premier_league": 8,
     "la_liga": 6,
@@ -57,7 +59,6 @@ HOURLY_CAPS = {
     "bundesliga": 5,
     "ligue_1": 5,
     "other": 6,
-    "tweet_drafts": 15,
 }
 
 LEAGUE_CLUBS = {
@@ -439,6 +440,23 @@ def find_or_create_cluster(
         return cid
 
 
+async def _draft_article_to_webhook(http: httpx.AsyncClient, webhook_url: str,
+                                    title: str, summary: str,
+                                    source: str, url: str) -> None:
+    """Fire-and-forget: draft a CentreGoals tweet from an article and post it."""
+    try:
+        draft = await asyncio.to_thread(
+            tweet_drafter.draft_article, claude_client, title, summary, source,
+        )
+        if not draft:
+            return
+        ok = await tweet_drafter.post_draft(http, webhook_url, draft, url)
+        if ok:
+            log.info(f"Drafted (article): {draft[:80]}")
+    except Exception as e:
+        log.error(f"Article drafter failed: {e}", exc_info=True)
+
+
 def cluster_already_posted(conn: sqlite3.Connection, cluster_id: str) -> bool:
     """True if any article in this cluster was already posted."""
     row = conn.execute(
@@ -601,6 +619,14 @@ async def process_article(
     uniqueness = max(1, min(5, int(result.get("uniqueness", 2))))
     tags = result.get("tags", [])
 
+    # Fire CentreGoals draft for the news-tweets channel — immediately, no
+    # cap, no clustering. The drafter itself filters out non-actionable items.
+    drafts_webhook = WEBHOOKS.get("tweet_drafts", "")
+    if drafts_webhook and urgency >= 2:
+        asyncio.create_task(_draft_article_to_webhook(
+            client, drafts_webhook, title_en, summary_en, source, url,
+        ))
+
     # Clustering
     cluster_id = find_or_create_cluster(conn, title_en, league, now)
     already_posted = cluster_already_posted(conn, cluster_id)
@@ -740,8 +766,6 @@ async def main():
                     claude_client,
                     client,
                     drafts_webhook,
-                    hourly_cap_check=lambda k: hourly_cap_available(conn, k),
-                    hourly_cap_record=lambda k: hourly_cap_record(conn, k),
                 )))
             except Exception as e:
                 log.error(f"Failed to start X stream: {e}", exc_info=True)
