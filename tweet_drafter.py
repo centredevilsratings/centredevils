@@ -50,7 +50,8 @@ DRAFTER_SYSTEM = """You draft CentreGoals tweets — concise, breaking-style foo
   "key_fact": "1-3 WORD KEY FACT in UPPERCASE ASCII letters/digits/spaces only (e.g. MUSCLE INJURY, DONE DEAL, SACKED, LEAVE, RETIRING, HERE WE GO, AGREED, SIGNED). No punctuation.",
   "emoji_flag": "Exactly one reaction emoji + one country flag emoji matching the story. Examples: 🤕🇧🇷 (injury), 👋🇺🇸 (departure), ✅🏴󠁧󠁢󠁥󠁮󠁧󠁿 (signing/England), 🏆 (trophy). Empty string only if truly unclear.",
   "context": "Optional single sentence adding ONE key follow-up detail (≤ 110 chars), or null.",
-  "attribution_handle": "If the source tweet credits a different journalist/outlet as the original reporter (e.g. 'via @FabrizioRomano', 'per @David_Ornstein', '🚨 @DiMarzio reports'), put that handle here WITHOUT the @ (e.g. 'FabrizioRomano'). Otherwise null — we'll attribute to the original poster."
+  "attribution_handle": "If the source tweet credits a different journalist/outlet as the original reporter (e.g. 'via @FabrizioRomano', 'per @David_Ornstein', '🚨 @DiMarzio reports'), put that handle here WITHOUT the @ (e.g. 'FabrizioRomano'). Otherwise null — we'll attribute to the original poster.",
+  "story_id": "Stable kebab-case slug uniquely identifying THIS underlying story for deduplication. Format: <player-or-subject>-<club>-<action>, lowercase, max 6 words, hyphenated. MUST be identical for EVERY different framing of the same underlying event: e.g. 'Anthony Gordon signs new Barcelona contract until 2031', 'Gordon to Barcelona, done deal', and 'Gordon completes £69m move to Barça' all share story_id 'anthony-gordon-barcelona-transfer'. For non-transfer stories use topic IDs: 'mourinho-real-madrid-appointment', 'neymar-muscle-injury-may2026', 'klopp-retirement-rumour'. Strip filler words ('the', 'to', 'for'). This is the dedup key — be consistent."
 }
 
 VOICE RULES:
@@ -237,16 +238,16 @@ def _source_to_handle(source: str) -> str:
 
 
 def draft_article(claude: anthropic.Anthropic, title: str, summary: str,
-                  source: str) -> Optional[str]:
-    """Draft a CentreGoals tweet from a news article (title + summary)."""
+                  source: str) -> Optional[tuple[str, str]]:
+    """Draft a CentreGoals tweet from a news article. Returns (draft, story_id)."""
     handle = _source_to_handle(source)
     body = f"Headline: {title}\n\nSummary: {summary}"
     return draft_tweet(claude, body, handle, source)
 
 
 def draft_tweet(claude: anthropic.Anthropic, source_text: str,
-                handle: str, author_name: str = "") -> Optional[str]:
-    """Generate a CentreGoals draft. Returns None to skip."""
+                handle: str, author_name: str = "") -> Optional[tuple[str, str]]:
+    """Generate a CentreGoals draft. Returns (draft, story_id) or None."""
     user_msg = (
         f"Source tweet by @{handle}"
         + (f" ({author_name})" if author_name else "")
@@ -255,7 +256,7 @@ def draft_tweet(claude: anthropic.Anthropic, source_text: str,
     try:
         msg = claude.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=400,
+            max_tokens=500,
             system=DRAFTER_SYSTEM,
             messages=[{"role": "user", "content": user_msg}],
         )
@@ -268,7 +269,11 @@ def draft_tweet(claude: anthropic.Anthropic, source_text: str,
     if not parsed or parsed.get("skip"):
         return None
 
-    return _build_draft(parsed, handle)
+    draft = _build_draft(parsed, handle)
+    if not draft:
+        return None
+    story_id = (parsed.get("story_id") or "").strip().lower()
+    return (draft, story_id)
 
 
 # ─── Discord posting ─────────────────────────────────────────────────────────
@@ -295,25 +300,27 @@ async def consume_stream(queue: asyncio.Queue,
                          claude: anthropic.Anthropic,
                          http: httpx.AsyncClient,
                          webhook_url: str,
-                         hourly_cap_check=None,
-                         hourly_cap_record=None) -> None:
+                         dedup_check=None,
+                         dedup_record=None) -> None:
     """Long-running task: pull tweets off the stream queue and draft them."""
     while True:
         event = await queue.get()
         try:
-            if hourly_cap_check and not hourly_cap_check("tweet_drafts"):
-                log.debug("Hourly cap hit for tweet_drafts — skipping")
-                continue
-            draft = await asyncio.to_thread(
+            result = await asyncio.to_thread(
                 draft_tweet, claude,
                 event["text"], event["handle"], event.get("author_name", ""),
             )
-            if not draft:
+            if not result:
+                continue
+            draft, story_id = result
+            if dedup_check and dedup_check(story_id):
+                log.info(f"DUP draft skipped ({story_id}): {draft[:60]}")
                 continue
             source_url = f"https://twitter.com/{event['handle']}/status/{event['id']}"
             ok = await post_draft(http, webhook_url, draft, source_url)
-            if ok and hourly_cap_record:
-                hourly_cap_record("tweet_drafts")
+            if ok:
+                if dedup_record:
+                    dedup_record(story_id)
                 log.info(f"Drafted from @{event['handle']}: {draft[:60]}")
         except Exception as e:
             log.error(f"Drafter consumer error: {e}", exc_info=True)

@@ -241,10 +241,17 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
             posted_at INTEGER
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS draft_log (
+            story_id TEXT PRIMARY KEY,
+            posted_at INTEGER
+        )
+    """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_fetched ON articles(fetched_at)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cluster ON articles(cluster_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_league ON articles(league)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_post_log ON post_log(webhook_key, posted_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_draft_log ON draft_log(posted_at)")
 
     _ensure_columns(conn, "articles", {
         "title_original": "TEXT",
@@ -297,6 +304,35 @@ def hourly_cap_record(conn: sqlite3.Connection, key: str) -> None:
     # Prune entries older than 2h to keep the table tiny.
     conn.execute("DELETE FROM post_log WHERE posted_at < ?",
                  (int(time.time()) - 7200,))
+    conn.commit()
+
+
+# ─── Draft dedup (story_id-based, 12h window) ────────────────────────────────
+DRAFT_DEDUP_WINDOW = 12 * 3600
+
+
+def draft_already_posted(conn: sqlite3.Connection, story_id: str) -> bool:
+    if not story_id:
+        return False
+    cutoff = int(time.time()) - DRAFT_DEDUP_WINDOW
+    row = conn.execute(
+        "SELECT 1 FROM draft_log WHERE story_id=? AND posted_at>? LIMIT 1",
+        (story_id, cutoff),
+    ).fetchone()
+    return row is not None
+
+
+def record_draft_posted(conn: sqlite3.Connection, story_id: str) -> None:
+    if not story_id:
+        return
+    now = int(time.time())
+    conn.execute(
+        "INSERT OR REPLACE INTO draft_log(story_id, posted_at) VALUES (?, ?)",
+        (story_id, now),
+    )
+    # Prune entries older than 48h.
+    conn.execute("DELETE FROM draft_log WHERE posted_at < ?",
+                 (now - 48 * 3600,))
     conn.commit()
 
 
@@ -496,19 +532,26 @@ def find_or_create_cluster(
         return cid
 
 
-async def _draft_article_to_webhook(http: httpx.AsyncClient, webhook_url: str,
+async def _draft_article_to_webhook(http: httpx.AsyncClient,
+                                    conn: sqlite3.Connection,
+                                    webhook_url: str,
                                     title: str, summary: str,
                                     source: str, url: str) -> None:
     """Fire-and-forget: draft a CentreGoals tweet from an article and post it."""
     try:
-        draft = await asyncio.to_thread(
+        result = await asyncio.to_thread(
             tweet_drafter.draft_article, claude_client, title, summary, source,
         )
-        if not draft:
+        if not result:
+            return
+        draft, story_id = result
+        if draft_already_posted(conn, story_id):
+            log.info(f"DUP draft skipped ({story_id}): {title[:60]}")
             return
         ok = await tweet_drafter.post_draft(http, webhook_url, draft, url)
         if ok:
-            log.info(f"Drafted (article): {draft[:80]}")
+            record_draft_posted(conn, story_id)
+            log.info(f"Drafted (article, {story_id}): {draft[:80]}")
     except Exception as e:
         log.error(f"Article drafter failed: {e}", exc_info=True)
 
@@ -688,7 +731,7 @@ async def process_article(
     drafts_webhook = WEBHOOKS.get("tweet_drafts", "")
     if drafts_webhook and urgency >= 2 and _is_trusted_for_drafts(source):
         asyncio.create_task(_draft_article_to_webhook(
-            client, drafts_webhook, title_en, summary_en, source, url,
+            client, conn, drafts_webhook, title_en, summary_en, source, url,
         ))
 
     # Clustering
@@ -830,6 +873,8 @@ async def main():
                     claude_client,
                     client,
                     drafts_webhook,
+                    dedup_check=lambda sid: draft_already_posted(conn, sid),
+                    dedup_record=lambda sid: record_draft_posted(conn, sid),
                 )))
             except Exception as e:
                 log.error(f"Failed to start X stream: {e}", exc_info=True)
