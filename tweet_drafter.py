@@ -103,7 +103,7 @@ Context sentence rules:
 - If you cannot add a specific second fact, set context to null. Do not pad.
 
 ATTRIBUTION RULES — aggregator passthrough:
-The source tweet may come from an aggregator account that is RELAYING someone else's reporting. Known aggregators include: @TouchlineX, @DeadlineDayLive, @AlbicelesteTalk, @brfootball, @OneFootball, @BeFootball, @eurofootcom, @MadridZone, @MadridXtra, @ManagingBarca, @ATMUniverse, @PSGINT_, @iMiaSanMia, @AlNassrZone, @TotalCristiano, @mufcMPB, @ActuFoot_, @vibesfoot, @ActuSPL.
+The source tweet may come from an aggregator account that is RELAYING someone else's reporting. Known aggregators include: @TouchlineX, @DeadlineDayLive, @AlbicelesteTalk, @brfootball, @OneFootball, @_BeFootball, @eurofootcom, @theMadridZone, @MadridXtra, @ManagingBarca, @atletiuniverse, @PSGINT_, @iMiaSanMia, @AlNassrZone, @TotalCristiano, @mufcMPB, @ActuFoot_, @vibesfoot, @ActuSPL.
 If the source tweet body credits another journalist or outlet — patterns like "via @X", "per @X", "🚨 @X reports", "(@X)", "[@X]", "source: @X", "according to @X", "@X:", "X reports" — set attribution_handle to that credited handle (without the @). That's the real reporter; the aggregator is just the loudspeaker.
 If no credit is given in the body, leave attribution_handle null.
 
@@ -137,7 +137,7 @@ Source tweet by @TouchlineX: "🚨 NEW: Manchester United have reached full agre
 Output:
 {"skip": false, "label": "BREAKING", "line1_template": "Manchester United reach full agreement with RB Leipzig for Xavi Simons, {{KEY}}!", "key_fact": "DONE DEAL", "emoji_flag": "✅🔴", "context": "€70m total package, 5-year deal. Medical scheduled for tomorrow.", "attribution_handle": "FabrizioRomano"}
 
-Source tweet by @MadridZone: "🚨 Real Madrid have submitted a €60m bid for Piero Hincapié. Leverkusen want closer to €75m. Per @MatteMoretto."
+Source tweet by @theMadridZone: "🚨 Real Madrid have submitted a €60m bid for Piero Hincapié. Leverkusen want closer to €75m. Per @MatteMoretto."
 Output:
 {"skip": false, "label": "JUST IN", "line1_template": "Real Madrid submit {{KEY}} for Piero Hincapié, Leverkusen holding out.", "key_fact": "€60M BID", "emoji_flag": "👀🇪🇨", "context": "Leverkusen want closer to €75m for the Ecuadorian defender.", "attribution_handle": "MatteMoretto"}
 

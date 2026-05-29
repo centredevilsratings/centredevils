@@ -58,13 +58,13 @@ JOURNALISTS: list[str] = [
     "SkySport",
 
     # ── Modern aggregator outlets ──
-    "brfootball", "OneFootball", "BeFootball", "eurofootcom",
+    "brfootball", "OneFootball", "_BeFootball", "eurofootcom",
 
     # ── Rival aggregators (track to see what they break) ──
     "TouchlineX", "DeadlineDayLive", "AlbicelesteTalk",
 
     # ── Club / fan aggregator accounts ──
-    "MadridZone", "MadridXtra", "ManagingBarca", "ATMUniverse",
+    "theMadridZone", "MadridXtra", "ManagingBarca", "atletiuniverse",
     "PSGINT_", "iMiaSanMia", "AlNassrZone", "TotalCristiano",
     "mufcMPB",
 
