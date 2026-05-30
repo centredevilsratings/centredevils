@@ -63,7 +63,37 @@ VOICE RULES:
 - "JUST IN" → credible developing/JUST-reported news (not yet officially confirmed).
 - "NEW" → newly surfaced reporting, fresh angles, or notable analysis that isn't quite breaking or just-in.
 - "OFFICIAL" → news directly announced by the CLUB, PLAYER, or LEAGUE themselves. Triggers: club's own social account ("Real Madrid is delighted to announce…"), player's own account ("It's official, I'm joining…"), league's announcement, or a trusted outlet reporting "the club has officially confirmed". When you use OFFICIAL, the source IS the team/player/league — no journalist source line will be added. Only use OFFICIAL when the announcement clearly originates from the entity itself, not from a reporter's claim.
-- "RECORD" → a statistical record being set / broken / extended by a player, manager, team, or competition. Triggers: a superlative + a concrete number ("HIGHEST", "MOST", "FEWEST", "OLDEST", "YOUNGEST", "FIRST", "ONLY", "LONGEST", "FASTEST", "MOST DECORATED" + a number, percentage, or count). The stat MUST be present in the source text — never invent stats. RECORD drafts get NO source attribution line (the stat is presented as a fact). For records, the emoji slot can be 1-2 thematic emojis instead of the strict reaction+flag combo: 🏆🇪🇸 (trophy + nationality), 😱❌ (shock + cross for never-achieved), 🌟🇪🇸 (sparkle + flag for achievement), 🥇 (gold medal), etc. Tweets from the canonical stats accounts (@OptaJoe, @OptaJose, @OptaPaolo, @OptaFranz, @OptaJean, @OptaJoao, @OptaAnalyst, @OptaFacts, @Squawka, @SquawkaNews, @WhoScored, @SofascoreINT, @StatMuse, @StatsBomb, @InfogolApp, @MisterChip) should DEFAULT to RECORD whenever they contain a superlative + number — that's their entire purpose.
+- "RECORD" → a GENUINELY HISTORIC stat being set / broken / extended. NOT every stat tweet — only ones that reach into the all-time / club-history / competition-history register.
+
+RECORD QUALIFICATION RULES — STRICT:
+The source text must contain BOTH of these:
+  (a) A superlative: HIGHEST, MOST, FEWEST, OLDEST, YOUNGEST, FIRST, ONLY, LONGEST, FASTEST, MOST DECORATED, BEST EVER, WORST EVER.
+  (b) A historic time/scope anchor proving this is not just an in-season factoid: "ever", "in history", "of all time", "in [club] history", "in [competition] history", "since [year ≥ 30 years ago]", "in the [decade]s".
+
+DOES qualify as RECORD (real, historic):
+- "Most goals in a single Premier League season ever" ✅
+- "Youngest player to score in a Champions League final in history" ✅
+- "First team since 1968 to..." ✅
+- "Highest win % of any manager with 50+ CL games in history" ✅
+- "Only team in European Cup history to..." ✅
+- "Most decorated coach in [club] history" ✅
+
+Does NOT qualify (in-season or personal stat — skip or use a different label):
+- "Salah has scored 12 PL goals this season" ❌ (just a tally)
+- "Arsenal have won 5 in a row" ❌ (short streak, not historic)
+- "Mbappé's best return for PSG" ❌ (personal best, not club/competition record)
+- "Most goals THIS SEASON in the PL" ❌ (single-season superlative without 'ever' or 'in history' = not historic)
+- "Liverpool unbeaten in 8 home games" ❌ (current run, not all-time)
+- "10th hat-trick of his career" ❌ (career milestone, not a record unless explicitly framed as one)
+
+If you see a single-season superlative without an 'ever'/'in history'/'since 19XX' anchor, do NOT use RECORD. Either skip or use null label with hedged framing.
+
+RECORD format:
+- No [@source] line — the stat is presented as a fact.
+- emoji_flag can be 1-2 thematic emojis: 🏆🇪🇸 (trophy + nationality), 🌟🇪🇸 (sparkle + flag), 😱❌ (shock + cross for never-achieved), 🥇 (gold medal).
+- The stat number/percentage must appear in line1_template, usually in parens at the end.
+
+Stats accounts (@OptaJoe, @OptaJose, @OptaPaolo, @OptaFranz, @OptaJean, @OptaJoao, @OptaAnalyst, @OptaFacts, @Squawka, @SquawkaNews, @WhoScored, @SofascoreINT, @StatMuse, @StatsBomb, @InfogolApp, @MisterChip) are CANDIDATES for RECORD — but only when their tweet actually clears the qualification bar above. Skip the rest of their output.
 - null label → softer secondary stories.
 - key_fact must be the SINGLE most operationally important phrase. Keep it 1-3 words.
 - Common key_fact values: MUSCLE INJURY, ACL INJURY, DONE DEAL, HERE WE GO, AGREED, SIGNED, LEAVE, SACKED, RETIRING, EXTENDS, REJECTED, RECALLED, EYEING, LINKED.
@@ -215,6 +245,16 @@ Source tweet by @PSGINT_: "🏆 Luis Enrique has now won 12 trophies as PSG mana
 Output:
 {"skip": false, "label": "RECORD", "is_quote": false, "line1_template": "Luis Enrique becomes {{KEY}} manager in PSG history with his 12th trophy.", "key_fact": "MOST DECORATED", "emoji_flag": "🏆🇪🇸", "context": null, "attribution_handle": null, "quote_speaker": "", "quote_text": "", "story_id": "luis-enrique-psg-most-decorated-manager"}
 [NOTE: trophy+flag emoji, count inline rather than parens — both formats acceptable.]
+
+Source tweet by @OptaJoe: "12 - Mohamed Salah has now scored 12 Premier League goals this season, his highest tally since 2022/23."
+Output:
+{"skip": true, "label": null, "is_quote": false, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null, "attribution_handle": null, "quote_speaker": "", "quote_text": "", "story_id": ""}
+[NOTE: in-season tally + personal best — NOT a historic record. No 'ever'/'in history'/'since 19XX' anchor. Even though the source is an Opta account, this does not clear the RECORD bar. Skip.]
+
+Source tweet by @OptaJoe: "5 - Arsenal have now won 5 Premier League matches in a row for the first time this season."
+Output:
+{"skip": true, "label": null, "is_quote": false, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null, "attribution_handle": null, "quote_speaker": "", "quote_text": "", "story_id": ""}
+[NOTE: current short-run streak, not historic. Skip.]
 
 Source tweet by @PSG_inside: "Nasser Al-Khelaifi on Luis Enrique after the Champions League final win: 'Luis Enrique has sparked a revolution in football, not just for Paris but for football as a whole. He is the best coach in the world.'"
 Output:
