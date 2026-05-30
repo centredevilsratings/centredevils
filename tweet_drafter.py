@@ -52,8 +52,9 @@ DRAFTER_SYSTEM = """You draft CentreGoals tweets — concise, breaking-style foo
   "emoji_flag": "Exactly one reaction emoji + one country flag emoji matching the story. Examples: 🤕🇧🇷 (injury), 👋🇺🇸 (departure), ✅🏴󠁧󠁢󠁥󠁮󠁧󠁿 (signing/England), 🏆 (trophy). Empty string only if truly unclear or is_quote=true.",
   "context": "Optional single sentence adding ONE key follow-up detail (≤ 110 chars), or null.",
   "attribution_handle": "If the source tweet credits a different journalist/outlet as the original reporter (e.g. 'via @FabrizioRomano', 'per @David_Ornstein', '🚨 @DiMarzio reports'), put that handle here WITHOUT the @ (e.g. 'FabrizioRomano'). Otherwise null — we'll attribute to the original poster. IGNORED when label='OFFICIAL'.",
-  "quote_speaker": "Speaker name + brief topic context (e.g. 'Mikel Arteta after Arsenal's CL final loss', 'Pep Guardiola on Mikel Arteta'). REQUIRED when is_quote=true, else empty string.",
-  "quote_text": "The verbatim quote text WITHOUT outer quotation marks — we add them. REQUIRED when is_quote=true, else empty string.",
+  "quote_speaker": "Speaker name, optionally followed by 'on <topic>' (e.g. 'Mikel Arteta on penalty selection', 'Nasser Al-Khelaifi', 'Vinicius Jr on the referee'). No trailing colon — we add it. REQUIRED when is_quote=true, else empty string.",
+  "quote_text": "The verbatim quote. Use a blank line (two newlines: \\n\\n) to separate distinct quote paragraphs when a single quote spans multiple paragraphs. NO surrounding quotation marks — we add them per journalistic convention (each paragraph opens with \", only the last paragraph closes with \"). REQUIRED when is_quote=true, else empty string.",
+  "quote_emoji": "Optional ONE emoji rendered after the closing quotation mark of the LAST paragraph (e.g. ❤️ for affection, 🔥 for spicy, 🤯 for shocking, 😤 for furious, 🐐 for GOATed). Empty string if not adding one.",
   "story_id": "Stable kebab-case slug uniquely identifying THIS underlying story for deduplication. Format: <player-or-subject>-<club>-<action>, lowercase, max 6 words, hyphenated. MUST be identical for EVERY different framing of the same underlying event."
 }
 
@@ -111,11 +112,11 @@ Examples of what DOES NOT qualify — these are ALL skip=true:
 - Anything that wouldn't have a football Twitter account quote-tweeting it in shock
 
 Format when is_quote=true:
-- line1_template, key_fact, emoji_flag must be empty strings.
-- quote_speaker = speaker + brief topic anchor (e.g. "Pep Guardiola on Mikel Arteta", "Mikel Arteta after losing the CL final", "Vinicius Jr on the referee").
-- quote_text = the verbatim quote (we add the surrounding quotation marks). Trim to the most explosive ~200 chars if it's long; do not paraphrase.
-- Still set attribution_handle if an aggregator is relaying another journalist's interview.
-- label can stay null for quotes (the format itself signals it's a quote).
+- The renderer produces:  🚨🚨🎙️| <quote_speaker>: "<quote_text>" <quote_emoji>
+- For multi-paragraph quotes, separate paragraphs in quote_text with a blank line. The renderer applies journalistic quotation: each paragraph opens with ", only the LAST paragraph closes with " (then optional emoji).
+- NO [@source] attribution line is added for quotes. The speaker IS the source.
+- line1_template, key_fact, emoji_flag, context, attribution_handle, label all unused — leave as empty string / null.
+- quote_text must be the verbatim quote. Trim only at sentence boundaries if too long. Never paraphrase.
 
 REQUIRED — at least ONE of these must appear in line1_template or context:
 - Transfer fee in €/£/$ (e.g. "€60m", "£25m + £5m add-ons")
@@ -199,14 +200,19 @@ Output:
 {"skip": false, "label": "OFFICIAL", "is_quote": false, "line1_template": "Real Madrid appoint José Mourinho as Head Coach until {{KEY}}.", "key_fact": "JUNE 2029", "emoji_flag": "🤝🇵🇹", "context": "Unveiling tomorrow at the Santiago Bernabéu.", "attribution_handle": null, "quote_speaker": "", "quote_text": "", "story_id": "mourinho-real-madrid-appointment"}
 [NOTE: posted by the club itself — label=OFFICIAL, no source line will be added.]
 
-Source tweet by @SkyKaveh: "Mikel Arteta to Sky Sports after Arsenal's Champions League final defeat: 'We deserved to win this tonight. I told the boys this is not over. We will be back and we will win it next year. I guarantee it.'"
+Source tweet by @PSG_inside: "Nasser Al-Khelaifi on Luis Enrique after the Champions League final win: 'Luis Enrique has sparked a revolution in football, not just for Paris but for football as a whole. He is the best coach in the world.'"
 Output:
-{"skip": false, "label": null, "is_quote": true, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null, "quote_speaker": "Mikel Arteta after Arsenal's Champions League final defeat", "quote_text": "We deserved to win this tonight. I told the boys this is not over. We will be back and we will win it next year. I guarantee it.", "attribution_handle": null, "story_id": "arteta-cl-final-defeat-promise"}
-[NOTE: emotionally charged + bold prediction after a huge moment — qualifies. is_quote=true, no LABEL needed.]
+{"skip": false, "label": null, "is_quote": true, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null, "quote_speaker": "Nasser Al-Khelaifi", "quote_text": "Luis Enrique has sparked a revolution in football, not just for Paris but for football as a whole. He is the best coach in the world.", "quote_emoji": "❤️", "attribution_handle": null, "story_id": "al-khelaifi-luis-enrique-praise"}
+[NOTE: single-paragraph viral quote, trailing ❤️ for affection. No source attribution will be added.]
+
+Source tweet by @SkyKaveh: "Mikel Arteta on the penalty shootout: 'We had prepared for exactly this and trained for this moment. It was planned, prepared, and Gabriel had to take the fifth penalty. He never misses any penalties in training.'"
+Output:
+{"skip": false, "label": null, "is_quote": true, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null, "quote_speaker": "Mikel Arteta on penalty selection and order", "quote_text": "We had prepared for exactly this and trained for this moment.\n\nIt was planned, prepared, and Gabriel had to take the fifth penalty. He never misses any penalties in training.", "quote_emoji": "", "attribution_handle": null, "story_id": "arteta-penalty-shootout-explanation"}
+[NOTE: long quote split into two paragraphs with a blank line. Renderer will open " on each paragraph, close " only on the last.]
 
 Source tweet by @TheAthleticFC: "Pep Guardiola post-match: 'We are happy with the three points. The boys played well, especially in the second half. We have to keep going.'"
 Output:
-{"skip": true, "label": null, "is_quote": false, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null, "quote_speaker": "", "quote_text": "", "attribution_handle": null, "story_id": ""}
+{"skip": true, "label": null, "is_quote": false, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null, "quote_speaker": "", "quote_text": "", "quote_emoji": "", "attribution_handle": null, "story_id": ""}
 [NOTE: generic post-match platitude — exactly what we DON'T draft. Skip.]
 
 Source tweet by @TouchlineX: "🚨 NEW: Manchester United have reached full agreement with RB Leipzig for Xavi Simons. €70m total package, 5-year deal. Medical scheduled for tomorrow. Via @FabrizioRomano 🔴"
@@ -237,23 +243,46 @@ def _build_draft(parsed: dict, handle: str) -> Optional[str]:
 
     # ── Sensational-quote path ────────────────────────────────────────────
     if is_quote:
-        speaker = (parsed.get("quote_speaker") or "").strip()
-        quote = (parsed.get("quote_text") or "").strip().strip('"')
+        speaker = (parsed.get("quote_speaker") or "").strip().rstrip(":")
+        quote = (parsed.get("quote_text") or "").strip()
+        quote_emoji = (parsed.get("quote_emoji") or "").strip()
         if not speaker or not quote:
             return None
-        prefix = "🚨🚨| "
-        line1 = f"{speaker}:"
-        override = (parsed.get("attribution_handle") or "").strip().lstrip("@")
-        final_handle = override if override else handle
-        attribution = f"[@{final_handle}]"
-        draft = "\n".join([prefix + line1, f'"{quote}"', attribution])
+
+        prefix = "🚨🚨🎙️| "
+
+        # Strip wrapping quotes the model may have added anyway.
+        quote = quote.strip('"').strip("'").strip()
+        paragraphs = [p.strip().strip('"').strip() for p in re.split(r"\n\s*\n", quote) if p.strip()]
+        if not paragraphs:
+            return None
+
+        emoji_suffix = f" {quote_emoji}" if quote_emoji else ""
+
+        # Journalistic convention: every paragraph opens with ",
+        # only the LAST paragraph closes with ".
+        if len(paragraphs) == 1:
+            draft = f'{prefix}{speaker}: "{paragraphs[0]}"{emoji_suffix}'
+        else:
+            first = f'{prefix}{speaker}: "{paragraphs[0]}'
+            middle = [f'"{p}' for p in paragraphs[1:-1]]
+            last = f'"{paragraphs[-1]}"{emoji_suffix}'
+            # Blank line between paragraphs.
+            draft = "\n\n".join([first, *middle, last])
+
         if len(draft) <= MAX_LEN:
             return draft
-        # Trim the quote if over budget.
-        budget = MAX_LEN - len(prefix + line1) - len(attribution) - 6  # newlines + quotes
+
+        # Over budget — fall back to first paragraph only.
+        single = f'{prefix}{speaker}: "{paragraphs[0]}"{emoji_suffix}'
+        if len(single) <= MAX_LEN:
+            return single
+
+        # Last-ditch: trim the paragraph at a word boundary.
+        budget = MAX_LEN - len(prefix) - len(speaker) - len(emoji_suffix) - 5  # ': ""…'
         if budget > 40:
-            trimmed = quote[:budget].rsplit(" ", 1)[0] + "…"
-            return "\n".join([prefix + line1, f'"{trimmed}"', attribution])
+            trimmed = paragraphs[0][:budget].rsplit(" ", 1)[0] + "…"
+            return f'{prefix}{speaker}: "{trimmed}"{emoji_suffix}'
         return None
 
     # ── News path ─────────────────────────────────────────────────────────
