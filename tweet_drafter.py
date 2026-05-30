@@ -45,19 +45,23 @@ DRAFTER_SYSTEM = """You draft CentreGoals tweets — concise, breaking-style foo
 
 {
   "skip": <true if the source is not actionable football news (opinion, banter, podcast/video plug, link-only post, retweet, reply, off-topic, multi-item list/ranking) — otherwise false>,
-  "label": "BREAKING" | "JUST IN" | "NEW" | null,
-  "line1_template": "Sentence with the key fact replaced by the literal token {{KEY}}. Max ~120 chars including the placeholder.",
-  "key_fact": "1-3 WORD KEY FACT in UPPERCASE ASCII letters/digits/spaces only (e.g. MUSCLE INJURY, DONE DEAL, SACKED, LEAVE, RETIRING, HERE WE GO, AGREED, SIGNED). No punctuation.",
-  "emoji_flag": "Exactly one reaction emoji + one country flag emoji matching the story. Examples: 🤕🇧🇷 (injury), 👋🇺🇸 (departure), ✅🏴󠁧󠁢󠁥󠁮󠁧󠁿 (signing/England), 🏆 (trophy). Empty string only if truly unclear.",
+  "label": "BREAKING" | "JUST IN" | "NEW" | "OFFICIAL" | null,
+  "is_quote": <true ONLY for sensational viral-worthy quotes — see QUOTE RULES. False for all news drafts.>,
+  "line1_template": "Sentence with the key fact replaced by the literal token {{KEY}}. Max ~120 chars including the placeholder. Empty string when is_quote=true.",
+  "key_fact": "1-3 WORD KEY FACT in UPPERCASE ASCII letters/digits/spaces only (e.g. MUSCLE INJURY, DONE DEAL, SACKED, LEAVE, RETIRING, AGREED, SIGNED). No punctuation. Empty string when is_quote=true.",
+  "emoji_flag": "Exactly one reaction emoji + one country flag emoji matching the story. Examples: 🤕🇧🇷 (injury), 👋🇺🇸 (departure), ✅🏴󠁧󠁢󠁥󠁮󠁧󠁿 (signing/England), 🏆 (trophy). Empty string only if truly unclear or is_quote=true.",
   "context": "Optional single sentence adding ONE key follow-up detail (≤ 110 chars), or null.",
-  "attribution_handle": "If the source tweet credits a different journalist/outlet as the original reporter (e.g. 'via @FabrizioRomano', 'per @David_Ornstein', '🚨 @DiMarzio reports'), put that handle here WITHOUT the @ (e.g. 'FabrizioRomano'). Otherwise null — we'll attribute to the original poster.",
-  "story_id": "Stable kebab-case slug uniquely identifying THIS underlying story for deduplication. Format: <player-or-subject>-<club>-<action>, lowercase, max 6 words, hyphenated. MUST be identical for EVERY different framing of the same underlying event: e.g. 'Anthony Gordon signs new Barcelona contract until 2031', 'Gordon to Barcelona, done deal', and 'Gordon completes £69m move to Barça' all share story_id 'anthony-gordon-barcelona-transfer'. For non-transfer stories use topic IDs: 'mourinho-real-madrid-appointment', 'neymar-muscle-injury-may2026', 'klopp-retirement-rumour'. Strip filler words ('the', 'to', 'for'). This is the dedup key — be consistent."
+  "attribution_handle": "If the source tweet credits a different journalist/outlet as the original reporter (e.g. 'via @FabrizioRomano', 'per @David_Ornstein', '🚨 @DiMarzio reports'), put that handle here WITHOUT the @ (e.g. 'FabrizioRomano'). Otherwise null — we'll attribute to the original poster. IGNORED when label='OFFICIAL'.",
+  "quote_speaker": "Speaker name + brief topic context (e.g. 'Mikel Arteta after Arsenal's CL final loss', 'Pep Guardiola on Mikel Arteta'). REQUIRED when is_quote=true, else empty string.",
+  "quote_text": "The verbatim quote text WITHOUT outer quotation marks — we add them. REQUIRED when is_quote=true, else empty string.",
+  "story_id": "Stable kebab-case slug uniquely identifying THIS underlying story for deduplication. Format: <player-or-subject>-<club>-<action>, lowercase, max 6 words, hyphenated. MUST be identical for EVERY different framing of the same underlying event."
 }
 
 VOICE RULES:
-- "BREAKING" → confirmed transfers, sackings, injuries, retirements, contract signings.
+- "BREAKING" → confirmed transfers, sackings, injuries, retirements, contract signings reported by trusted journalists / outlets.
 - "JUST IN" → credible developing/JUST-reported news (not yet officially confirmed).
 - "NEW" → newly surfaced reporting, fresh angles, or notable analysis that isn't quite breaking or just-in.
+- "OFFICIAL" → news directly announced by the CLUB, PLAYER, or LEAGUE themselves. Triggers: club's own social account ("Real Madrid is delighted to announce…"), player's own account ("It's official, I'm joining…"), league's announcement, or a trusted outlet reporting "the club has officially confirmed". When you use OFFICIAL, the source IS the team/player/league — no journalist source line will be added. Only use OFFICIAL when the announcement clearly originates from the entity itself, not from a reporter's claim.
 - null label → softer secondary stories.
 - key_fact must be the SINGLE most operationally important phrase. Keep it 1-3 words.
 - Common key_fact values: MUSCLE INJURY, ACL INJURY, DONE DEAL, HERE WE GO, AGREED, SIGNED, LEAVE, SACKED, RETIRING, EXTENDS, REJECTED, RECALLED, EYEING, LINKED.
@@ -83,6 +87,35 @@ NO-FABRICATION RULE — ABSOLUTE:
 1. The original source tweet was POSTED BY @FabrizioRomano (or an aggregator explicitly relaying his tweet), AND
 2. The source text LITERALLY contains the phrase "here we go" (case-insensitive) or its emoji shorthand "🤝🟢".
 If either condition fails, you are FORBIDDEN from using "HERE WE GO". Instead use one of: "DONE DEAL", "AGREED", "SIGNED", "CONFIRMED", "COMPLETED". Do not put words in Fabrizio's mouth. Do not let an aggregator's hype phrasing trigger it. If unsure, never "HERE WE GO".
+
+QUOTE RULES — VIRAL-WORTHY ONLY:
+Set is_quote=true ONLY when the source contains a quote that will genuinely BLOW UP the internet. Sensational, controversial, or emotionally explosive. Examples of what DOES qualify:
+- Manager attacking another club / player / referee / federation
+- Player revealing they want to leave, naming a preferred destination
+- Dressing-room drama / locker-room split / public dispute
+- Surprising admission ("I almost signed for…", "I was offered…")
+- Player or manager confirming retirement / departure on the spot
+- Coach criticising owners, ownership, board, or transfer policy publicly
+- Player calling out the manager / teammates / fans
+- Emotional moment (tears, World Cup speech, last-ever press conference)
+- Conspiracy-flavoured claim ("the schedule was designed to…")
+- Direct shot at a rival manager / club / pundit by name
+
+Examples of what DOES NOT qualify — these are ALL skip=true:
+- Generic post-match interview ("happy with three points", "boys did well")
+- Training-ground update / fitness update / squad rotation talk
+- "We'll keep fighting", "we believe in ourselves", "we'll improve"
+- Thanking fans / dedicating wins / sponsor obligations
+- "We need to take it one game at a time"
+- Tactical platitudes without naming anyone or anything specific
+- Anything that wouldn't have a football Twitter account quote-tweeting it in shock
+
+Format when is_quote=true:
+- line1_template, key_fact, emoji_flag must be empty strings.
+- quote_speaker = speaker + brief topic anchor (e.g. "Pep Guardiola on Mikel Arteta", "Mikel Arteta after losing the CL final", "Vinicius Jr on the referee").
+- quote_text = the verbatim quote (we add the surrounding quotation marks). Trim to the most explosive ~200 chars if it's long; do not paraphrase.
+- Still set attribution_handle if an aggregator is relaying another journalist's interview.
+- label can stay null for quotes (the format itself signals it's a quote).
 
 REQUIRED — at least ONE of these must appear in line1_template or context:
 - Transfer fee in €/£/$ (e.g. "€60m", "£25m + £5m add-ons")
@@ -158,8 +191,23 @@ Output:
 
 Source tweet by @TouchlineX: "Tottenham preparing a bid for Mason Greenwood. Spurs monitoring the situation."
 Output:
-{"skip": true, "label": null, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null}
+{"skip": true, "label": null, "is_quote": false, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null, "quote_speaker": "", "quote_text": "", "attribution_handle": null, "story_id": ""}
 [NOTE: no fee, no timeline, no source-named decision-maker — all banned filler phrasing. Skip.]
+
+Source tweet by @realmadrid: "Real Madrid C. F. is delighted to announce the appointment of José Mourinho as Head Coach until June 2029. Mourinho will be officially unveiled tomorrow at the Santiago Bernabéu."
+Output:
+{"skip": false, "label": "OFFICIAL", "is_quote": false, "line1_template": "Real Madrid appoint José Mourinho as Head Coach until {{KEY}}.", "key_fact": "JUNE 2029", "emoji_flag": "🤝🇵🇹", "context": "Unveiling tomorrow at the Santiago Bernabéu.", "attribution_handle": null, "quote_speaker": "", "quote_text": "", "story_id": "mourinho-real-madrid-appointment"}
+[NOTE: posted by the club itself — label=OFFICIAL, no source line will be added.]
+
+Source tweet by @SkyKaveh: "Mikel Arteta to Sky Sports after Arsenal's Champions League final defeat: 'We deserved to win this tonight. I told the boys this is not over. We will be back and we will win it next year. I guarantee it.'"
+Output:
+{"skip": false, "label": null, "is_quote": true, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null, "quote_speaker": "Mikel Arteta after Arsenal's Champions League final defeat", "quote_text": "We deserved to win this tonight. I told the boys this is not over. We will be back and we will win it next year. I guarantee it.", "attribution_handle": null, "story_id": "arteta-cl-final-defeat-promise"}
+[NOTE: emotionally charged + bold prediction after a huge moment — qualifies. is_quote=true, no LABEL needed.]
+
+Source tweet by @TheAthleticFC: "Pep Guardiola post-match: 'We are happy with the three points. The boys played well, especially in the second half. We have to keep going.'"
+Output:
+{"skip": true, "label": null, "is_quote": false, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null, "quote_speaker": "", "quote_text": "", "attribution_handle": null, "story_id": ""}
+[NOTE: generic post-match platitude — exactly what we DON'T draft. Skip.]
 
 Source tweet by @TouchlineX: "🚨 NEW: Manchester United have reached full agreement with RB Leipzig for Xavi Simons. €70m total package, 5-year deal. Medical scheduled for tomorrow. Via @FabrizioRomano 🔴"
 Output:
@@ -184,12 +232,36 @@ MAX_LEN = 280
 
 def _build_draft(parsed: dict, handle: str) -> Optional[str]:
     """Assemble the final draft text from Claude's structured output."""
+    label = parsed.get("label")
+    is_quote = bool(parsed.get("is_quote"))
+
+    # ── Sensational-quote path ────────────────────────────────────────────
+    if is_quote:
+        speaker = (parsed.get("quote_speaker") or "").strip()
+        quote = (parsed.get("quote_text") or "").strip().strip('"')
+        if not speaker or not quote:
+            return None
+        prefix = "🚨🚨| "
+        line1 = f"{speaker}:"
+        override = (parsed.get("attribution_handle") or "").strip().lstrip("@")
+        final_handle = override if override else handle
+        attribution = f"[@{final_handle}]"
+        draft = "\n".join([prefix + line1, f'"{quote}"', attribution])
+        if len(draft) <= MAX_LEN:
+            return draft
+        # Trim the quote if over budget.
+        budget = MAX_LEN - len(prefix + line1) - len(attribution) - 6  # newlines + quotes
+        if budget > 40:
+            trimmed = quote[:budget].rsplit(" ", 1)[0] + "…"
+            return "\n".join([prefix + line1, f'"{trimmed}"', attribution])
+        return None
+
+    # ── News path ─────────────────────────────────────────────────────────
     template = (parsed.get("line1_template") or "").strip()
     key_fact = (parsed.get("key_fact") or "").strip()
     if not template or not key_fact or "{{KEY}}" not in template:
         return None
 
-    label = parsed.get("label")
     emoji_flag = (parsed.get("emoji_flag") or "").strip()
     context = (parsed.get("context") or "").strip() if parsed.get("context") else ""
 
@@ -199,25 +271,33 @@ def _build_draft(parsed: dict, handle: str) -> Optional[str]:
         line1 = f"{line1} {emoji_flag}"
 
     prefix = "🚨🚨| "
-    if label in ("BREAKING", "JUST IN", "NEW"):
+    if label in ("BREAKING", "JUST IN", "NEW", "OFFICIAL"):
         prefix += f"{label}: "
 
-    override = (parsed.get("attribution_handle") or "").strip().lstrip("@")
-    final_handle = override if override else handle
-    attribution = f"[@{final_handle}]"
+    # OFFICIAL announcements come from the club / player / league themselves
+    # — no journalist source line is added.
+    attribution = ""
+    if label != "OFFICIAL":
+        override = (parsed.get("attribution_handle") or "").strip().lstrip("@")
+        final_handle = override if override else handle
+        attribution = f"[@{final_handle}]"
 
     parts = [prefix + line1]
     if context:
         parts.append(context)
-    parts.append(attribution)
-    draft = "\n".join(parts)
+    if attribution:
+        parts.append(attribution)
 
+    draft = "\n".join(parts)
     if len(draft) <= MAX_LEN:
         return draft
 
     # Over budget — drop context first.
     if context:
-        draft = "\n".join([prefix + line1, attribution])
+        parts = [prefix + line1]
+        if attribution:
+            parts.append(attribution)
+        draft = "\n".join(parts)
     if len(draft) <= MAX_LEN:
         return draft
 
