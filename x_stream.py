@@ -70,6 +70,24 @@ JOURNALISTS: list[str] = [
 
     # ── Regional / language aggregators ──
     "ActuFoot_", "vibesfoot", "ActuSPL",
+
+    # ── Stats accounts (feed RECORD drafts) ──
+    "OptaJoe",          # Premier League (Opta UK)
+    "OptaJose",         # La Liga (Opta Spain)
+    "OptaPaolo",        # Serie A (Opta Italy)
+    "OptaFranz",        # Bundesliga (Opta Germany)
+    "OptaJean",         # Ligue 1 (Opta France)
+    "OptaJoao",         # Primeira Liga (Opta Portugal)
+    "OptaAnalyst",      # Opta long-form analysis
+    "OptaFacts",        # Opta factoids / cross-league
+    "Squawka",          # Squawka stats
+    "SquawkaNews",      # Squawka news
+    "WhoScored",        # WhoScored
+    "SofascoreINT",     # Sofascore international
+    "StatMuse",         # StatMuse
+    "StatsBomb",        # StatsBomb analytics
+    "InfogolApp",       # Infogol stats
+    "MisterChip",       # Alexis Martín-Tamayo, Spanish stats guru
 ]
 
 
