@@ -45,11 +45,11 @@ DRAFTER_SYSTEM = """You draft CentreGoals tweets — concise, breaking-style foo
 
 {
   "skip": <true if the source is not actionable football news (opinion, banter, podcast/video plug, link-only post, retweet, reply, off-topic, multi-item list/ranking) — otherwise false>,
-  "label": "BREAKING" | "JUST IN" | "NEW" | "OFFICIAL" | null,
+  "label": "BREAKING" | "JUST IN" | "NEW" | "OFFICIAL" | "RECORD" | null,
   "is_quote": <true ONLY for sensational viral-worthy quotes — see QUOTE RULES. False for all news drafts.>,
   "line1_template": "Sentence with the key fact replaced by the literal token {{KEY}}. Max ~120 chars including the placeholder. Empty string when is_quote=true.",
   "key_fact": "1-3 WORD KEY FACT in UPPERCASE ASCII letters/digits/spaces only (e.g. MUSCLE INJURY, DONE DEAL, SACKED, LEAVE, RETIRING, AGREED, SIGNED). No punctuation. Empty string when is_quote=true.",
-  "emoji_flag": "Exactly one reaction emoji + one country flag emoji matching the story. Examples: 🤕🇧🇷 (injury), 👋🇺🇸 (departure), ✅🏴󠁧󠁢󠁥󠁮󠁧󠁿 (signing/England), 🏆 (trophy). Empty string only if truly unclear or is_quote=true.",
+  "emoji_flag": "1-2 thematic emojis at the end of line 1. For news: typically one reaction emoji + one country flag (🤕🇧🇷 injury, 👋🇺🇸 departure, ✅🏴󠁧󠁢󠁥󠁮󠁧󠁿 signing/England). For RECORD: trophy/sparkle/medal combos work too (🏆🇪🇸, 🌟🇪🇸, 😱❌ for never-achieved). Empty string only if truly unclear or is_quote=true.",
   "context": "Optional single sentence adding ONE key follow-up detail (≤ 110 chars), or null.",
   "attribution_handle": "If the source tweet credits a different journalist/outlet as the original reporter (e.g. 'via @FabrizioRomano', 'per @David_Ornstein', '🚨 @DiMarzio reports'), put that handle here WITHOUT the @ (e.g. 'FabrizioRomano'). Otherwise null — we'll attribute to the original poster. IGNORED when label='OFFICIAL'.",
   "quote_speaker": "Speaker name, optionally followed by 'on <topic>' (e.g. 'Mikel Arteta on penalty selection', 'Nasser Al-Khelaifi', 'Vinicius Jr on the referee'). No trailing colon — we add it. REQUIRED when is_quote=true, else empty string.",
@@ -63,6 +63,7 @@ VOICE RULES:
 - "JUST IN" → credible developing/JUST-reported news (not yet officially confirmed).
 - "NEW" → newly surfaced reporting, fresh angles, or notable analysis that isn't quite breaking or just-in.
 - "OFFICIAL" → news directly announced by the CLUB, PLAYER, or LEAGUE themselves. Triggers: club's own social account ("Real Madrid is delighted to announce…"), player's own account ("It's official, I'm joining…"), league's announcement, or a trusted outlet reporting "the club has officially confirmed". When you use OFFICIAL, the source IS the team/player/league — no journalist source line will be added. Only use OFFICIAL when the announcement clearly originates from the entity itself, not from a reporter's claim.
+- "RECORD" → a statistical record being set / broken / extended by a player, manager, team, or competition. Triggers: a superlative + a concrete number ("HIGHEST", "MOST", "FEWEST", "OLDEST", "YOUNGEST", "FIRST", "ONLY", "LONGEST", "FASTEST", "MOST DECORATED" + a number, percentage, or count). The stat MUST be present in the source text — never invent stats. RECORD drafts get NO source attribution line (the stat is presented as a fact). For records, the emoji slot can be 1-2 thematic emojis instead of the strict reaction+flag combo: 🏆🇪🇸 (trophy + nationality), 😱❌ (shock + cross for never-achieved), 🌟🇪🇸 (sparkle + flag for achievement), 🥇 (gold medal), etc.
 - null label → softer secondary stories.
 - key_fact must be the SINGLE most operationally important phrase. Keep it 1-3 words.
 - Common key_fact values: MUSCLE INJURY, ACL INJURY, DONE DEAL, HERE WE GO, AGREED, SIGNED, LEAVE, SACKED, RETIRING, EXTENDS, REJECTED, RECALLED, EYEING, LINKED.
@@ -200,6 +201,21 @@ Output:
 {"skip": false, "label": "OFFICIAL", "is_quote": false, "line1_template": "Real Madrid appoint José Mourinho as Head Coach until {{KEY}}.", "key_fact": "JUNE 2029", "emoji_flag": "🤝🇵🇹", "context": "Unveiling tomorrow at the Santiago Bernabéu.", "attribution_handle": null, "quote_speaker": "", "quote_text": "", "story_id": "mourinho-real-madrid-appointment"}
 [NOTE: posted by the club itself — label=OFFICIAL, no source line will be added.]
 
+Source tweet by @OptaJoe: "63.3% — Luis Enrique now has the highest win percentage of any manager in UEFA Champions League history with 50+ matches in charge. Elite."
+Output:
+{"skip": false, "label": "RECORD", "is_quote": false, "line1_template": "Luis Enrique has the {{KEY}} win percentage of any manager with 50+ games in UEFA Champions League history (63.3%).", "key_fact": "HIGHEST", "emoji_flag": "🇪🇸🌟", "context": null, "attribution_handle": null, "quote_speaker": "", "quote_text": "", "story_id": "luis-enrique-cl-win-percentage-record"}
+[NOTE: concrete stat (63.3%), superlative HIGHEST bolded, flag+sparkle emoji, no [@source] line.]
+
+Source tweet by @OptaJoe: "226 - Arsenal remain the only team in European Cup or Champions League history with the most appearances without ever winning the trophy. Cursed."
+Output:
+{"skip": false, "label": "RECORD", "is_quote": false, "line1_template": "Arsenal remain the only team with the {{KEY}} games in European Cup or Champions League history to NEVER lift the trophy (226).", "key_fact": "MOST", "emoji_flag": "😱❌", "context": null, "attribution_handle": null, "quote_speaker": "", "quote_text": "", "story_id": "arsenal-most-cl-games-never-won"}
+[NOTE: shock+cross emoji for never-achieved record, stat in parens.]
+
+Source tweet by @PSGINT_: "🏆 Luis Enrique has now won 12 trophies as PSG manager, making him the most decorated coach in the club's history."
+Output:
+{"skip": false, "label": "RECORD", "is_quote": false, "line1_template": "Luis Enrique becomes {{KEY}} manager in PSG history with his 12th trophy.", "key_fact": "MOST DECORATED", "emoji_flag": "🏆🇪🇸", "context": null, "attribution_handle": null, "quote_speaker": "", "quote_text": "", "story_id": "luis-enrique-psg-most-decorated-manager"}
+[NOTE: trophy+flag emoji, count inline rather than parens — both formats acceptable.]
+
 Source tweet by @PSG_inside: "Nasser Al-Khelaifi on Luis Enrique after the Champions League final win: 'Luis Enrique has sparked a revolution in football, not just for Paris but for football as a whole. He is the best coach in the world.'"
 Output:
 {"skip": false, "label": null, "is_quote": true, "line1_template": "", "key_fact": "", "emoji_flag": "", "context": null, "quote_speaker": "Nasser Al-Khelaifi", "quote_text": "Luis Enrique has sparked a revolution in football, not just for Paris but for football as a whole. He is the best coach in the world.", "quote_emoji": "❤️", "attribution_handle": null, "story_id": "al-khelaifi-luis-enrique-praise"}
@@ -300,13 +316,13 @@ def _build_draft(parsed: dict, handle: str) -> Optional[str]:
         line1 = f"{line1} {emoji_flag}"
 
     prefix = "🚨🚨| "
-    if label in ("BREAKING", "JUST IN", "NEW", "OFFICIAL"):
+    if label in ("BREAKING", "JUST IN", "NEW", "OFFICIAL", "RECORD"):
         prefix += f"{label}: "
 
-    # OFFICIAL announcements come from the club / player / league themselves
-    # — no journalist source line is added.
+    # OFFICIAL announcements come from the club / player / league themselves;
+    # RECORD stats are presented as facts. Neither gets a [@source] line.
     attribution = ""
-    if label != "OFFICIAL":
+    if label not in ("OFFICIAL", "RECORD"):
         override = (parsed.get("attribution_handle") or "").strip().lstrip("@")
         final_handle = override if override else handle
         attribution = f"[@{final_handle}]"
