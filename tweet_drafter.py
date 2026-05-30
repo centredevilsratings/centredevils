@@ -40,6 +40,28 @@ def to_math_bold(s: str) -> str:
     return "".join(out)
 
 
+# ─── Aggregator gating ───────────────────────────────────────────────────────
+# Accounts that primarily relay other journalists' reporting (and brand
+# every tweet with their own watermarked graphic). When the source handle
+# is one of these:
+#   • drop the [@source] line if no journalist is credited in the body
+#     (the aggregator is the loudspeaker, not the reporter)
+#   • drop the attached image regardless — their graphics are branded,
+#     not clean press photos. Operator picks one manually.
+AGGREGATOR_HANDLES: frozenset[str] = frozenset(h.lower() for h in {
+    "Plettigoal",
+    "TouchlineX", "DeadlineDayLive", "AlbicelesteTalk",
+    "brfootball", "OneFootball", "_BeFootball", "eurofootcom",
+    "theMadridZone", "MadridXtra", "ManagingBarca", "atletiuniverse",
+    "PSGINT_", "iMiaSanMia", "AlNassrZone", "TotalCristiano", "mufcMPB",
+    "ActuFoot_", "vibesfoot", "ActuSPL",
+})
+
+
+def is_aggregator(handle: str) -> bool:
+    return (handle or "").lower().lstrip("@") in AGGREGATOR_HANDLES
+
+
 # ─── Prompting ───────────────────────────────────────────────────────────────
 DRAFTER_SYSTEM = """You draft CentreGoals tweets — concise, breaking-style football news posts in the EXACT CentreGoals voice. Given a source tweet from a journalist or outlet (or a news headline + summary), return ONLY valid JSON with this schema:
 
@@ -186,7 +208,7 @@ Context sentence rules:
 - If you cannot add a specific second fact, set context to null. Do not pad.
 
 ATTRIBUTION RULES — aggregator passthrough:
-The source tweet may come from an aggregator account that is RELAYING someone else's reporting. Known aggregators include: @TouchlineX, @DeadlineDayLive, @AlbicelesteTalk, @brfootball, @OneFootball, @_BeFootball, @eurofootcom, @theMadridZone, @MadridXtra, @ManagingBarca, @atletiuniverse, @PSGINT_, @iMiaSanMia, @AlNassrZone, @TotalCristiano, @mufcMPB, @ActuFoot_, @vibesfoot, @ActuSPL.
+The source tweet may come from an aggregator account that is RELAYING someone else's reporting. Known aggregators include: @Plettigoal, @TouchlineX, @DeadlineDayLive, @AlbicelesteTalk, @brfootball, @OneFootball, @_BeFootball, @eurofootcom, @theMadridZone, @MadridXtra, @ManagingBarca, @atletiuniverse, @PSGINT_, @iMiaSanMia, @AlNassrZone, @TotalCristiano, @mufcMPB, @ActuFoot_, @vibesfoot, @ActuSPL. When the source IS one of these, work harder to find the real reporter in the tweet body — they almost always credit one. If genuinely no journalist is credited, leave attribution_handle null and the renderer will omit the source line entirely (no aggregator-credit ever appears in a draft).
 If the source tweet body credits another journalist or outlet — patterns like "via @X", "per @X", "🚨 @X reports", "(@X)", "[@X]", "source: @X", "according to @X", "@X:", "X reports" — set attribution_handle to that credited handle (without the @). That's the real reporter; the aggregator is just the loudspeaker.
 If no credit is given in the body, leave attribution_handle null.
 
@@ -361,11 +383,15 @@ def _build_draft(parsed: dict, handle: str) -> Optional[str]:
 
     # OFFICIAL announcements come from the club / player / league themselves;
     # RECORD stats are presented as facts. Neither gets a [@source] line.
+    # Aggregators don't get credit either unless the body credits a real
+    # journalist that the model surfaced as attribution_handle.
     attribution = ""
     if label not in ("OFFICIAL", "RECORD"):
         override = (parsed.get("attribution_handle") or "").strip().lstrip("@")
-        final_handle = override if override else handle
-        attribution = f"[@{final_handle}]"
+        if override:
+            attribution = f"[@{override}]"
+        elif not is_aggregator(handle):
+            attribution = f"[@{handle}]"
 
     parts = [prefix + line1]
     if context:
@@ -521,8 +547,13 @@ async def consume_stream(queue: asyncio.Queue,
                 log.info(f"DUP draft skipped ({story_id}): {draft[:60]}")
                 continue
             source_url = f"https://twitter.com/{event['handle']}/status/{event['id']}"
+            # Aggregator graphics are always branded/watermarked — drop the
+            # attached image so the operator picks a clean photo manually.
+            image_url = event.get("image_url")
+            if is_aggregator(event["handle"]):
+                image_url = None
             ok = await post_draft(http, webhook_url, draft, source_url,
-                                  image_url=event.get("image_url"))
+                                  image_url=image_url)
             if ok:
                 if dedup_record:
                     dedup_record(story_id)

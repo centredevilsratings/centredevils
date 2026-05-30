@@ -20,7 +20,7 @@ log = logging.getLogger("football-bot.x_stream")
 JOURNALISTS: list[str] = [
     # ── Tier-1 transfer reporters (global scoop-breakers) ──
     "FabrizioRomano", "David_Ornstein", "DiMarzio", "NicoSchira",
-    "JacobsBen", "Plettigoal", "MatteMoretto", "sachatavolieri",
+    "JacobsBen", "Plettiii", "MatteMoretto", "sachatavolieri",
     "RudyGaletti", "cfbayern", "FabriceHawkins", "MartynZiegler",
     "SamiMokbel81", "SkyKaveh", "GeoffShreeves", "SkySportsLyall",
 
@@ -61,7 +61,7 @@ JOURNALISTS: list[str] = [
     "brfootball", "OneFootball", "_BeFootball", "eurofootcom",
 
     # ── Rival aggregators (track to see what they break) ──
-    "TouchlineX", "DeadlineDayLive", "AlbicelesteTalk",
+    "TouchlineX", "DeadlineDayLive", "AlbicelesteTalk", "Plettigoal",
 
     # ── Club / fan aggregator accounts ──
     "theMadridZone", "MadridXtra", "ManagingBarca", "atletiuniverse",
@@ -135,6 +135,10 @@ class _Listener(tweepy.StreamingClient):
             return
 
         # Capture the first attached photo, if any — the tweet's own media.
+        # Strictly photos only: videos and animated GIFs expose a
+        # preview_image_url that's just a still frame (often a mid-action
+        # blur or a stadium wide shot) — those are NOT usable as the
+        # story photo. Operator picks a clean photo manually instead.
         image_url = None
         media_items = includes.get("media", [])
         media_map = {m.media_key: m for m in media_items}
@@ -149,10 +153,6 @@ class _Listener(tweepy.StreamingClient):
                 continue
             if getattr(m, "type", None) == "photo" and getattr(m, "url", None):
                 image_url = m.url
-                break
-            preview = getattr(m, "preview_image_url", None)
-            if preview:
-                image_url = preview
                 break
 
         event = {
