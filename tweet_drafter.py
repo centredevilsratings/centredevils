@@ -40,16 +40,13 @@ def to_math_bold(s: str) -> str:
     return "".join(out)
 
 
-# ─── Aggregator gating ───────────────────────────────────────────────────────
-# Accounts that primarily relay other journalists' reporting (and brand
-# every tweet with their own watermarked graphic). When the source handle
-# is one of these:
-#   • drop the [@source] line if no journalist is credited in the body
-#     (the aggregator is the loudspeaker, not the reporter)
-#   • drop the attached image regardless — their graphics are branded,
-#     not clean press photos. Operator picks one manually.
+# ─── Aggregator + branded-graphic gating ─────────────────────────────────────
+# Aggregators are pure relay accounts — they post other journalists'
+# reporting without doing their own. When the source handle is one of
+# these we drop BOTH the [@source] line (unless the body credits a real
+# reporter that the model surfaces as attribution_handle) AND the
+# attached image (their visuals are branded watermarked cards).
 AGGREGATOR_HANDLES: frozenset[str] = frozenset(h.lower() for h in {
-    "Plettigoal",
     "TouchlineX", "DeadlineDayLive", "AlbicelesteTalk",
     "brfootball", "OneFootball", "_BeFootball", "eurofootcom",
     "theMadridZone", "MadridXtra", "ManagingBarca", "atletiuniverse",
@@ -57,9 +54,23 @@ AGGREGATOR_HANDLES: frozenset[str] = frozenset(h.lower() for h in {
     "ActuFoot_", "vibesfoot", "ActuSPL",
 })
 
+# Branded-graphic posters: real journalists / outlets whose reporting is
+# legit (they keep the [@source] byline) but who attach custom designed
+# "BREAKING / DONE DEAL" graphics to their tweets instead of clean press
+# photos. We strip the image so the operator picks one manually.
+# This is a SUPERSET of AGGREGATOR_HANDLES.
+BRANDED_GRAPHIC_HANDLES: frozenset[str] = AGGREGATOR_HANDLES | frozenset({
+    "plettigoal",   # Florian Plettenberg — tier-1 reporter, but every
+                    # tweet is a branded "DONE DEAL" card.
+})
+
 
 def is_aggregator(handle: str) -> bool:
     return (handle or "").lower().lstrip("@") in AGGREGATOR_HANDLES
+
+
+def posts_branded_graphics(handle: str) -> bool:
+    return (handle or "").lower().lstrip("@") in BRANDED_GRAPHIC_HANDLES
 
 
 # ─── Prompting ───────────────────────────────────────────────────────────────
@@ -208,7 +219,7 @@ Context sentence rules:
 - If you cannot add a specific second fact, set context to null. Do not pad.
 
 ATTRIBUTION RULES — aggregator passthrough:
-The source tweet may come from an aggregator account that is RELAYING someone else's reporting. Known aggregators include: @Plettigoal, @TouchlineX, @DeadlineDayLive, @AlbicelesteTalk, @brfootball, @OneFootball, @_BeFootball, @eurofootcom, @theMadridZone, @MadridXtra, @ManagingBarca, @atletiuniverse, @PSGINT_, @iMiaSanMia, @AlNassrZone, @TotalCristiano, @mufcMPB, @ActuFoot_, @vibesfoot, @ActuSPL. When the source IS one of these, work harder to find the real reporter in the tweet body — they almost always credit one. If genuinely no journalist is credited, leave attribution_handle null and the renderer will omit the source line entirely (no aggregator-credit ever appears in a draft).
+The source tweet may come from an aggregator account that is RELAYING someone else's reporting. Known aggregators include: @TouchlineX, @DeadlineDayLive, @AlbicelesteTalk, @brfootball, @OneFootball, @_BeFootball, @eurofootcom, @theMadridZone, @MadridXtra, @ManagingBarca, @atletiuniverse, @PSGINT_, @iMiaSanMia, @AlNassrZone, @TotalCristiano, @mufcMPB, @ActuFoot_, @vibesfoot, @ActuSPL. When the source IS one of these, work harder to find the real reporter in the tweet body — they almost always credit one. If genuinely no journalist is credited, leave attribution_handle null and the renderer will omit the source line entirely (no aggregator-credit ever appears in a draft).
 If the source tweet body credits another journalist or outlet — patterns like "via @X", "per @X", "🚨 @X reports", "(@X)", "[@X]", "source: @X", "according to @X", "@X:", "X reports" — set attribution_handle to that credited handle (without the @). That's the real reporter; the aggregator is just the loudspeaker.
 If no credit is given in the body, leave attribution_handle null.
 
@@ -547,10 +558,11 @@ async def consume_stream(queue: asyncio.Queue,
                 log.info(f"DUP draft skipped ({story_id}): {draft[:60]}")
                 continue
             source_url = f"https://twitter.com/{event['handle']}/status/{event['id']}"
-            # Aggregator graphics are always branded/watermarked — drop the
-            # attached image so the operator picks a clean photo manually.
+            # Branded graphics (aggregators + journos like Plettigoal who
+            # post designed "DONE DEAL" cards) — drop the image so the
+            # operator picks a clean photo manually.
             image_url = event.get("image_url")
-            if is_aggregator(event["handle"]):
+            if posts_branded_graphics(event["handle"]):
                 image_url = None
             ok = await post_draft(http, webhook_url, draft, source_url,
                                   image_url=image_url)

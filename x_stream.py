@@ -20,7 +20,7 @@ log = logging.getLogger("football-bot.x_stream")
 JOURNALISTS: list[str] = [
     # ── Tier-1 transfer reporters (global scoop-breakers) ──
     "FabrizioRomano", "David_Ornstein", "DiMarzio", "NicoSchira",
-    "JacobsBen", "Plettiii", "MatteMoretto", "sachatavolieri",
+    "JacobsBen", "Plettigoal", "MatteMoretto", "sachatavolieri",
     "RudyGaletti", "cfbayern", "FabriceHawkins", "MartynZiegler",
     "SamiMokbel81", "SkyKaveh", "GeoffShreeves", "SkySportsLyall",
 
@@ -61,7 +61,7 @@ JOURNALISTS: list[str] = [
     "brfootball", "OneFootball", "_BeFootball", "eurofootcom",
 
     # ── Rival aggregators (track to see what they break) ──
-    "TouchlineX", "DeadlineDayLive", "AlbicelesteTalk", "Plettigoal",
+    "TouchlineX", "DeadlineDayLive", "AlbicelesteTalk",
 
     # ── Club / fan aggregator accounts ──
     "theMadridZone", "MadridXtra", "ManagingBarca", "atletiuniverse",
