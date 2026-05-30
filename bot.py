@@ -756,10 +756,13 @@ async def process_article(
         log.info(f"SKIP non-operational: {title[:80]}")
         return
 
-    # Extract article body + preview image
-    meta = await extract_article_metadata(client, url)
-    body = meta["text"]
-    image_url = meta["image_url"]
+    # Extract article body. We deliberately do NOT use the article's
+    # og:image — major outlets brand their share previews with watermarks
+    # (BBC Sport bug, L'Équipe title cards, Sky bug, etc.) and the preview
+    # image often isn't the actual subject of the story. Human operator
+    # picks the article-side photo. Logos handled separately (Phase 2).
+    body = await extract_article_text(client, url)
+    image_url = None
 
     # Detect language
     try:
