@@ -305,14 +305,26 @@ def draft_tweet(claude: anthropic.Anthropic, source_text: str,
 
 # ─── Discord posting ─────────────────────────────────────────────────────────
 async def post_draft(client: httpx.AsyncClient, webhook_url: str,
-                     draft: str, source_url: Optional[str] = None) -> bool:
+                     draft: str, source_url: Optional[str] = None,
+                     image_url: Optional[str] = None,
+                     logo_url: Optional[str] = None) -> bool:
     if not webhook_url:
         return False
     content = f"```\n{draft}\n```"
     if source_url:
         content += f"\nSource: <{source_url}>"
+
+    payload: dict = {"content": content}
+    embeds = []
+    if image_url:
+        embeds.append({"image": {"url": image_url}, "title": "Story photo"})
+    if logo_url:
+        embeds.append({"image": {"url": logo_url}, "title": "Logo"})
+    if embeds:
+        payload["embeds"] = embeds
+
     try:
-        resp = await client.post(webhook_url, json={"content": content}, timeout=10)
+        resp = await client.post(webhook_url, json=payload, timeout=10)
         if resp.status_code in (200, 204):
             return True
         log.error(f"Drafts webhook error {resp.status_code}: {resp.text[:200]}")
@@ -344,7 +356,8 @@ async def consume_stream(queue: asyncio.Queue,
                 log.info(f"DUP draft skipped ({story_id}): {draft[:60]}")
                 continue
             source_url = f"https://twitter.com/{event['handle']}/status/{event['id']}"
-            ok = await post_draft(http, webhook_url, draft, source_url)
+            ok = await post_draft(http, webhook_url, draft, source_url,
+                                  image_url=event.get("image_url"))
             if ok:
                 if dedup_record:
                     dedup_record(story_id)

@@ -110,10 +110,32 @@ class _Listener(tweepy.StreamingClient):
             if ref.type in ("retweeted", "replied_to", "quoted"):
                 return
 
-        users = {u.id: u for u in (response.includes or {}).get("users", [])}
+        includes = response.includes or {}
+        users = {u.id: u for u in includes.get("users", [])}
         author = users.get(tweet.author_id)
         if not author:
             return
+
+        # Capture the first attached photo, if any — the tweet's own media.
+        image_url = None
+        media_items = includes.get("media", [])
+        media_map = {m.media_key: m for m in media_items}
+        keys = []
+        if tweet.attachments:
+            keys = (tweet.attachments.get("media_keys")
+                    if isinstance(tweet.attachments, dict)
+                    else getattr(tweet.attachments, "media_keys", [])) or []
+        for key in keys:
+            m = media_map.get(key)
+            if not m:
+                continue
+            if getattr(m, "type", None) == "photo" and getattr(m, "url", None):
+                image_url = m.url
+                break
+            preview = getattr(m, "preview_image_url", None)
+            if preview:
+                image_url = preview
+                break
 
         event = {
             "id": str(tweet.id),
@@ -121,6 +143,7 @@ class _Listener(tweepy.StreamingClient):
             "handle": author.username,
             "author_name": author.name,
             "created_at": tweet.created_at.isoformat() if tweet.created_at else None,
+            "image_url": image_url,
         }
         self._loop.call_soon_threadsafe(self._queue.put_nowait, event)
 
@@ -151,9 +174,10 @@ def start_stream(bearer_token: str, loop: asyncio.AbstractEventLoop,
     client = _Listener(bearer_token, loop, queue)
     _sync_rules(client, handles)
     client.filter(
-        tweet_fields=["author_id", "referenced_tweets", "created_at"],
-        expansions=["author_id"],
+        tweet_fields=["author_id", "referenced_tweets", "created_at", "attachments"],
+        expansions=["author_id", "attachments.media_keys"],
         user_fields=["username", "name"],
+        media_fields=["url", "preview_image_url", "type"],
         threaded=True,
     )
     # tweepy's threaded filter creates its own thread internally; we return

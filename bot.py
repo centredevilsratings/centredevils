@@ -425,31 +425,45 @@ async def fetch_rss(client: httpx.AsyncClient, source: dict) -> list[dict]:
         return []
 
 
-async def extract_article_text(client: httpx.AsyncClient, url: str) -> str:
-    """Extract main text from article URL."""
+async def extract_article_metadata(client: httpx.AsyncClient, url: str) -> dict:
+    """Extract main text + og:image from an article URL."""
     try:
         resp = await client.get(url, timeout=10, follow_redirects=True)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        # Remove noise
+        # Preview image: og:image → twitter:image → first article <img>
+        image_url = None
+        og = soup.find("meta", property="og:image")
+        if og and og.get("content"):
+            image_url = og["content"]
+        if not image_url:
+            tw = soup.find("meta", attrs={"name": "twitter:image"}) \
+                or soup.find("meta", property="twitter:image")
+            if tw and tw.get("content"):
+                image_url = tw["content"]
+
+        # Strip noise for text extraction.
         for tag in soup(["script", "style", "nav", "header", "footer", "aside", "ad"]):
             tag.decompose()
 
-        # Try article tag first
         article = soup.find("article")
         if article:
             text = article.get_text(separator=" ", strip=True)
         else:
-            # Fallback to paragraphs
             paragraphs = soup.find_all("p")
             text = " ".join(p.get_text(strip=True) for p in paragraphs)
 
-        # Truncate to 1500 chars for API cost efficiency
-        return text[:1500].strip()
+        return {"text": text[:1500].strip(), "image_url": image_url}
     except Exception as e:
         log.debug(f"Article extraction failed for {url}: {e}")
-        return ""
+        return {"text": "", "image_url": None}
+
+
+async def extract_article_text(client: httpx.AsyncClient, url: str) -> str:
+    """Backwards-compatible wrapper around extract_article_metadata."""
+    meta = await extract_article_metadata(client, url)
+    return meta["text"]
 
 
 # ─── Article ID & Dedup ───────────────────────────────────────────────────────
@@ -574,7 +588,8 @@ async def _draft_article_to_webhook(http: httpx.AsyncClient,
                                     conn: sqlite3.Connection,
                                     webhook_url: str,
                                     title: str, summary: str,
-                                    source: str, url: str) -> None:
+                                    source: str, url: str,
+                                    image_url: Optional[str] = None) -> None:
     """Fire-and-forget: draft a CentreGoals tweet from an article and post it."""
     try:
         result = await asyncio.to_thread(
@@ -586,7 +601,9 @@ async def _draft_article_to_webhook(http: httpx.AsyncClient,
         if draft_already_posted(conn, story_id):
             log.info(f"DUP draft skipped ({story_id}): {title[:60]}")
             return
-        ok = await tweet_drafter.post_draft(http, webhook_url, draft, url)
+        ok = await tweet_drafter.post_draft(
+            http, webhook_url, draft, url, image_url=image_url,
+        )
         if ok:
             record_draft_posted(conn, story_id)
             log.info(f"Drafted (article, {story_id}): {draft[:80]}")
@@ -739,8 +756,10 @@ async def process_article(
         log.info(f"SKIP non-operational: {title[:80]}")
         return
 
-    # Extract article body
-    body = await extract_article_text(client, url)
+    # Extract article body + preview image
+    meta = await extract_article_metadata(client, url)
+    body = meta["text"]
+    image_url = meta["image_url"]
 
     # Detect language
     try:
@@ -770,6 +789,7 @@ async def process_article(
     if drafts_webhook and urgency >= 2 and _is_trusted_for_drafts(source):
         asyncio.create_task(_draft_article_to_webhook(
             client, conn, drafts_webhook, title_en, summary_en, source, url,
+            image_url,
         ))
 
     # Clustering
