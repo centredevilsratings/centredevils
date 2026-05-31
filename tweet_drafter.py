@@ -389,10 +389,13 @@ def _build_draft(parsed: dict, handle: str) -> Optional[str]:
         line1 = f"{line1} {emoji_flag}"
 
     prefix = "🚨🚨| "
-    if label in ("BREAKING", "JUST IN", "NEW", "OFFICIAL", "RECORD"):
-        # Labels render in math-bold (the draft sits in a code block where
+    if label == "RECORD":
+        # RECORD renders in math-bold (the draft sits in a code block where
         # markdown bold won't apply) — matches the CentreGoals house style.
+        # Other labels stay plain ASCII.
         prefix += f"{to_math_bold(label)}: "
+    elif label in ("BREAKING", "JUST IN", "NEW", "OFFICIAL"):
+        prefix += f"{label}: "
 
     # OFFICIAL announcements come from the club / player / league themselves;
     # RECORD stats are presented as facts. Neither gets a [@source] line.
