@@ -73,6 +73,30 @@ def posts_branded_graphics(handle: str) -> bool:
     return (handle or "").lower().lstrip("@") in BRANDED_GRAPHIC_HANDLES
 
 
+# ─── Women's-football filter ─────────────────────────────────────────────────
+# CentreGoals covers men's football only. Pre-filter at the source-text level
+# so we skip the Haiku call entirely on unambiguous women's-football tweets.
+_WOMENS_FOOTBALL_RE = re.compile(
+    r"\b("
+    r"women(?:['’]s|s)?|"                       # women, women's, womens
+    r"ladies|"
+    r"lioness(?:es)?|matildas|banyana|reggae\s+girlz|"
+    r"wsl|nwsl|uwcl|wucl|uswnt|wwc|"
+    r"liga[\s-]*f|"
+    r"frauen[-\s]?bundesliga|frauen[-\s]national|"
+    r"premi[èe]re\s+ligue\s+f[ée]minine|"
+    r"serie\s+a\s+femminile|"
+    r"f[ée]minin[ae]?s?|"
+    r"ballon\s+d['’]or\s+f[ée]minin"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def is_womens_football(text: str) -> bool:
+    return bool(_WOMENS_FOOTBALL_RE.search(text or ""))
+
+
 # ─── Prompting ───────────────────────────────────────────────────────────────
 DRAFTER_SYSTEM = """You draft CentreGoals tweets — concise, breaking-style football news posts in the EXACT CentreGoals voice. Given a source tweet from a journalist or outlet (or a news headline + summary), return ONLY valid JSON with this schema:
 
@@ -141,6 +165,9 @@ RECENCY RULES — CRITICAL, READ CAREFULLY:
 
 SPECIFICITY RULES — CRITICAL:
 The whole point of CentreGoals is to be the FASTEST, MOST DENSE source of football facts. Generic statements waste the reader's time. Every draft must carry at least one concrete data point from the source. If the source has no concrete data, prefer skip=true over a vague draft.
+
+MEN'S FOOTBALL ONLY — HARD SCOPE RULE:
+CentreGoals covers men's professional football exclusively. Set skip=true for anything about women's football: WSL, NWSL, UWCL / Women's Champions League, Women's World Cup, Lionesses, Matildas, USWNT, Liga F, Frauen-Bundesliga, Première Ligue Féminine, Serie A Femminile, Ballon d'Or Féminin, "Arsenal Women", "Chelsea Women", "Barça Femení", any "[Club] Women" framing, or any quote/story whose subject is a women's-football player, coach, or competition. If the source is ambiguous about which side, skip.
 
 NO-FABRICATION RULE — ABSOLUTE:
 - You may ONLY use facts that appear in the source text. NEVER invent fees, contract lengths, dates, ages, nationalities, decision-makers, rival clubs, medical dates, or any other detail that is not literally present in the source.
@@ -482,6 +509,9 @@ def draft_article(claude: anthropic.Anthropic, title: str, summary: str,
 def draft_tweet(claude: anthropic.Anthropic, source_text: str,
                 handle: str, author_name: str = "") -> Optional[tuple[str, str]]:
     """Generate a CentreGoals draft. Returns (draft, story_id) or None."""
+    # CentreGoals is men's-football only. Short-circuit before the LLM call.
+    if is_womens_football(source_text):
+        return None
     user_msg = (
         f"Source tweet by @{handle}"
         + (f" ({author_name})" if author_name else "")
