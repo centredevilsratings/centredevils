@@ -21,6 +21,7 @@ import httpx
 from bs4 import BeautifulSoup
 from langdetect import detect
 
+import imago
 import tweet_drafter
 import x_stream
 
@@ -601,6 +602,11 @@ async def _draft_article_to_webhook(http: httpx.AsyncClient,
         if draft_already_posted(conn, story_id):
             log.info(f"DUP draft skipped ({story_id}): {title[:60]}")
             return
+        # Prefer a clean IMAGO press photo on every draft; fall back to the
+        # article's own image (og:image) only when IMAGO isn't configured.
+        if imago.is_configured():
+            image_url = await imago.search_photo(
+                http, imago.query_from_draft(draft))
         ok = await tweet_drafter.post_draft(
             http, webhook_url, draft, url, image_url=image_url,
         )

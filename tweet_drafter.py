@@ -15,6 +15,8 @@ from typing import Optional
 import anthropic
 import httpx
 
+import imago
+
 log = logging.getLogger("football-bot.tweet_drafter")
 
 
@@ -593,12 +595,19 @@ async def consume_stream(queue: asyncio.Queue,
                 log.info(f"DUP draft skipped ({story_id}): {draft[:60]}")
                 continue
             source_url = f"https://twitter.com/{event['handle']}/status/{event['id']}"
-            # Branded graphics (aggregators + journos like Plettigoal who
-            # post designed "DONE DEAL" cards) — drop the image so the
-            # operator picks a clean photo manually.
-            image_url = event.get("image_url")
-            if posts_branded_graphics(event["handle"]):
-                image_url = None
+            # Photo selection. When IMAGO is configured we fetch a clean
+            # licensed press photo for EVERY draft (operator's choice),
+            # falling back to no photo if IMAGO returns nothing. When IMAGO
+            # is not configured, fall back to the tweet's own media minus
+            # branded graphics / video stills.
+            image_url = None
+            if imago.is_configured():
+                query = imago.query_from_draft(draft)
+                image_url = await imago.search_photo(http, query)
+            else:
+                image_url = event.get("image_url")
+                if posts_branded_graphics(event["handle"]):
+                    image_url = None
             ok = await post_draft(http, webhook_url, draft, source_url,
                                   image_url=image_url)
             if ok:

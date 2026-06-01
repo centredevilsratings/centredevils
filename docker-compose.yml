@@ -12,6 +12,8 @@ services:
       - BUNDESLIGA_WEBHOOK=${BUNDESLIGA_WEBHOOK}
       - LIGUE_1_WEBHOOK=${LIGUE_1_WEBHOOK}
       - OTHER_LEAGUES_WEBHOOK=${OTHER_LEAGUES_WEBHOOK}
+      - IMAGO_API_USER=${IMAGO_API_USER}
+      - IMAGO_API_KEY=${IMAGO_API_KEY}
       - DB_PATH=/data/football_ops.db
     volumes:
       - football_data:/data
