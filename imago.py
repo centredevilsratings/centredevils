@@ -175,7 +175,7 @@ def _is_portrait(hit: dict) -> bool:
 
 
 async def search_photo(client: httpx.AsyncClient, query: str,
-                       limit: int = 25) -> Optional[str]:
+                       limit: int = 100) -> Optional[str]:
     """Return a thumbnail URL for the best matching IMAGO portrait photo,
     or None.
 
