@@ -72,6 +72,10 @@ _PREFIX_RE = re.compile(r"^[^A-Za-z]*?\|\s*")          # 🚨🚨| or 🚨🚨�
 _LABEL_RE = re.compile(r"^(?:BREAKING|JUST IN|NEW|OFFICIAL|RECORD)\s*:\s*", re.I)
 _SOURCE_RE = re.compile(r"\[@[^\]]+\]")
 _NON_ASCII_RE = re.compile(r"[^\x00-\x7f]")            # strips leftover emojis/flags
+# Proper-noun matcher — Title-Case word, allowing hyphens and accented chars,
+# optionally joined to more Title-Case words. Matches "Harry Kane", "Al-Khelaifi",
+# "Manchester United", "Rodri", "Mbappé". Excludes all-caps labels.
+_NAME_RE = re.compile(r"\b[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'\-]+(?:\s+[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'\-]+)*\b")
 
 
 def _strip_math_bold(s: str) -> str:
@@ -87,29 +91,46 @@ def _deaccent(s: str) -> str:
 
 
 def query_from_draft(draft: str) -> str:
-    """Derive a clean photo search query (subject names) from a draft.
+    """Derive a clean photo search query — just the subject name — from a draft.
 
-    Takes the first line and strips the 🚨 prefix, the label, the [@source]
-    tag, the math-bold KEY fact, and emojis/flags — leaving the plain
-    subject names that IMAGO should match on. Accented names are
-    transliterated rather than dropped.
+    IMAGO matches the query against caption text; long action-phrases like
+    "Harry Kane on winning his second Golden Shoe" return zero hits because
+    no caption contains that exact string. So we extract the first proper-noun
+    sequence ("Harry Kane") and search on that.
+
+    Strategy:
+      1. Clean the first line (strip 🚨 prefix, label, [@source], emojis,
+         bold key-fact glyphs).
+      2. For quote drafts ("🎙"), the speaker name is everything before the
+         first colon — return that directly.
+      3. Otherwise, find proper-noun sequences. Prefer the first multi-word
+         name ("Harry Kane", "Manchester United"); fall back to the first
+         single-word name ("Rodri", "Dante"); fall back to the cleaned line.
     """
     first = (draft or "").splitlines()[0] if draft else ""
-    is_quote = "🎙" in first                           # quote format marker
+    is_quote = "🎙" in first
     first = _PREFIX_RE.sub("", first)
-    first = _strip_math_bold(first)                    # bold KEY + RECORD label → spaces
-    first = _LABEL_RE.sub("", first)                   # plain-ascii labels
+    first = _strip_math_bold(first)
+    first = _LABEL_RE.sub("", first)
     first = _SOURCE_RE.sub("", first)
-    first = _deaccent(first)                            # keep accented names
-    first = _NON_ASCII_RE.sub(" ", first)              # drop emojis / flags
-    if is_quote:
-        # Quote subject is the speaker name before the first colon.
-        first = first.split(":")[0]
-    else:
-        # A stripped bold RECORD label leaves an orphan leading colon.
-        first = re.sub(r"^\s*:\s*", "", first)
+    # Keep accents here — name extraction needs them so "Adi Hütter" matches
+    # as a 2-word name. Emojis/flags are pre-stripped by _PREFIX_RE; any
+    # leftover symbols in the body don't intersect with the Title-Case regex.
+    first = re.sub(r"^\s*:\s*", "", first)             # orphan colon from stripped label
     first = re.sub(r"\s+", " ", first).strip(" .,!?-:")
-    return first[:120]
+
+    if is_quote and ":" in first:
+        subject = first.split(":")[0].strip()
+    else:
+        names = _NAME_RE.findall(first)
+        multi = [n for n in names if " " in n]
+        subject = multi[0] if multi else (names[0] if names else first)
+
+    # Deaccent + ASCII-only at the END, just for the search query, so the
+    # match regex above had the original characters to work with.
+    subject = _deaccent(subject)
+    subject = _NON_ASCII_RE.sub("", subject)
+    return subject.strip()[:80]
 
 
 # ─── Search ──────────────────────────────────────────────────────────────────
