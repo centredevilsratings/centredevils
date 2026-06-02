@@ -15,6 +15,12 @@ the first real run. See imago_probe.py for a standalone schema probe.
 Env vars:
   IMAGO_API_USER            (required) — "imagoapi"
   IMAGO_API_KEY             (required) — the API key
+  IMAGO_ENABLED             "1" to turn the integration on. Defaults to OFF
+                            because imago-images.com is behind a BunnyCDN
+                            JS-challenge shield that 403s every non-browser
+                            fetcher (including Discord's image proxy) — see
+                            the diagnosis in the commit history. Flip to "1"
+                            once IMAGO confirms a working download endpoint.
   IMAGO_API_BASE            default "https://api.imago-images.com/api"
   IMAGO_SEARCH_PATH         default "/search"
   IMAGO_IMAGE_URL_TEMPLATE  default "https://www.imago-images.com/bild/{db}/{id}/w.jpg"
@@ -44,6 +50,7 @@ log = logging.getLogger("football-bot.imago")
 
 API_USER = os.environ.get("IMAGO_API_USER", "")
 API_KEY = os.environ.get("IMAGO_API_KEY", "")
+ENABLED = os.environ.get("IMAGO_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
 API_BASE = os.environ.get("IMAGO_API_BASE", "https://api.imago-images.com/api").rstrip("/")
 SEARCH_PATH = os.environ.get("IMAGO_SEARCH_PATH", "/search")
 IMAGE_URL_TEMPLATE = os.environ.get(
@@ -57,7 +64,10 @@ _DB_MAP = {"stock": "st", "sport": "sp"}
 
 
 def is_configured() -> bool:
-    return bool(API_USER and API_KEY)
+    """True only when the integration is BOTH credential-wired AND enabled.
+    Returning False makes both call sites (X-stream consumer, article
+    drafter) skip IMAGO and fall back to the tweet/article's own image."""
+    return ENABLED and bool(API_USER and API_KEY)
 
 
 def _headers() -> dict:
