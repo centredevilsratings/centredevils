@@ -18,7 +18,14 @@ Env vars:
   IMAGO_API_BASE            default "https://api.imago-images.com/api"
   IMAGO_SEARCH_PATH         default "/search"
   IMAGO_IMAGE_URL_TEMPLATE  default "https://www.imago-images.de/bild/{db}/{id}/s.jpg"
+                            ({db} is the 2-char code, {id} is the zero-padded pictureid)
   IMAGO_DEBUG               "1" to log raw responses at INFO (default: logs only on miss)
+
+Schema confirmed via imago_probe.py:
+  Auth headers: X-API-User + X-API-Key (NOT lowercase api-user/api-key, NOT Basic, NOT Bearer)
+  Request:      POST /search with {"searchquery", "querystring", "size", "from": 0}
+  Response:     [{"took": int, "total": int}, {"pictures": [{...}, ...]}]
+  Per picture:  pictureid (int), db ("stock"/"sport"), caption, source, byline, ...
 """
 
 from __future__ import annotations
@@ -43,11 +50,8 @@ IMAGE_URL_TEMPLATE = os.environ.get(
 )
 DEBUG = os.environ.get("IMAGO_DEBUG", "") == "1"
 
-# Candidate keys for the image id / database within a result object — IMAGO's
-# ES docs use German field names; we try several so a schema mismatch is
-# tolerated rather than fatal.
-_ID_KEYS = ("bildnummer", "mediaid", "pic_id", "picid", "id", "imageid")
-_DB_KEYS = ("db", "database", "datenbank", "source_db")
+# Map the API's verbose db name to its 2-char URL slug.
+_DB_MAP = {"stock": "st", "sport": "sp"}
 
 
 def is_configured() -> bool:
@@ -56,8 +60,8 @@ def is_configured() -> bool:
 
 def _headers() -> dict:
     return {
-        "api-user": API_USER,
-        "api-key": API_KEY,
+        "X-API-User": API_USER,
+        "X-API-Key": API_KEY,
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
@@ -121,51 +125,40 @@ def _build_payload(query: str, limit: int) -> dict:
 
 
 def _extract_hits(data) -> list:
-    """Pull the list of result objects out of whatever shape we got back."""
+    """Pull the list of picture objects out of IMAGO's response.
+
+    Confirmed shape: a 2-element list — [{"took":..,"total":..}, {"pictures":[...]}].
+    Falls back to a few other shapes in case the API evolves.
+    """
     if isinstance(data, list):
-        return data
-    if not isinstance(data, dict):
+        for entry in data:
+            if isinstance(entry, dict) and isinstance(entry.get("pictures"), list):
+                return entry["pictures"]
         return []
-    # Elasticsearch shape: {"hits": {"hits": [ {"_source": {...}} ]}}
-    hits = data.get("hits")
-    if isinstance(hits, dict) and isinstance(hits.get("hits"), list):
-        return [h.get("_source", h) for h in hits["hits"]]
-    if isinstance(hits, list):
-        return hits
-    # Other common shapes.
-    for key in ("results", "data", "items", "media", "images"):
-        v = data.get(key)
-        if isinstance(v, list):
-            return v
+    if isinstance(data, dict):
+        for key in ("pictures", "hits", "results", "data", "items"):
+            v = data.get(key)
+            if isinstance(v, list):
+                return v
     return []
 
 
-def _first(obj: dict, keys) -> Optional[str]:
-    for k in keys:
-        v = obj.get(k)
-        if v not in (None, ""):
-            return str(v)
-    return None
-
-
 def _hit_to_url(hit: dict) -> Optional[str]:
-    """Build a thumbnail URL from a result object."""
+    """Build a thumbnail URL from a pictures[] entry.
+
+    Schema: {"pictureid": int, "db": "stock"|"sport", ...}
+    URL pattern: https://www.imago-images.de/bild/{db_slug}/{id_zero_padded_10}/s.jpg
+    """
     if not isinstance(hit, dict):
         return None
-    # If the API already hands us a usable URL, prefer it.
-    for k in ("thumbnail", "thumb_url", "preview", "preview_url", "url", "src"):
-        v = hit.get(k)
-        if isinstance(v, str) and v.startswith("http"):
-            return v
-    img_id = _first(hit, _ID_KEYS)
-    db = _first(hit, _DB_KEYS) or "st"
-    if not img_id:
+    pid = hit.get("pictureid") or hit.get("bildnummer") or hit.get("id")
+    if pid is None:
         return None
-    # IMAGO ids are typically zero-padded to 10 digits in the URL.
-    if img_id.isdigit():
-        img_id = img_id.zfill(10)
+    db_raw = str(hit.get("db") or "stock").lower()
+    db = _DB_MAP.get(db_raw, db_raw[:2])
+    pid_str = str(pid).zfill(10)
     try:
-        return IMAGE_URL_TEMPLATE.format(db=db, id=img_id)
+        return IMAGE_URL_TEMPLATE.format(db=db, id=pid_str)
     except Exception:
         return None
 
