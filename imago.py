@@ -163,9 +163,25 @@ def _hit_to_url(hit: dict) -> Optional[str]:
         return None
 
 
+def _is_portrait(hit: dict) -> bool:
+    """True when the picture is taller than wide. height/width come back as
+    strings in the API response."""
+    try:
+        h = int(hit.get("height") or 0)
+        w = int(hit.get("width") or 0)
+    except (TypeError, ValueError):
+        return False
+    return h > 0 and w > 0 and h > w
+
+
 async def search_photo(client: httpx.AsyncClient, query: str,
-                       limit: int = 5) -> Optional[str]:
-    """Return a thumbnail URL for the best matching IMAGO photo, or None.
+                       limit: int = 25) -> Optional[str]:
+    """Return a thumbnail URL for the best matching IMAGO portrait photo,
+    or None.
+
+    Filters to portrait orientation (height > width) per operator preference
+    — landscape photos crop awkwardly in Discord embeds. Searches with a
+    larger limit so we still have candidates after filtering.
 
     Never raises — any failure logs and returns None so the draft pipeline
     falls back to posting with no photo.
@@ -198,22 +214,26 @@ async def search_photo(client: httpx.AsyncClient, query: str,
 
     hits = _extract_hits(data)
     if not hits:
-        # Log the raw shape so we can correct _extract_hits if the schema
-        # differs from the assumed ES layout.
-        log.warning(f"IMAGO no hits parsed for {query!r}; raw keys="
-                    f"{list(data.keys()) if isinstance(data, dict) else type(data)} "
-                    f"body={str(data)[:400]}")
+        log.warning(f"IMAGO no hits parsed for {query!r}; raw="
+                    f"{str(data)[:400]}")
         return None
 
+    portraits = [h for h in hits if _is_portrait(h)]
     if DEBUG:
-        log.info(f"IMAGO hit[0] for {query!r}: {str(hits[0])[:400]}")
+        log.info(f"IMAGO {query!r}: {len(hits)} hits, "
+                 f"{len(portraits)} portrait")
 
-    for hit in hits:
+    if not portraits:
+        log.info(f"IMAGO no portrait hits for {query!r} "
+                 f"({len(hits)} landscape/square skipped)")
+        return None
+
+    for hit in portraits:
         photo_url = _hit_to_url(hit)
         if photo_url:
             log.info(f"IMAGO photo for {query!r}: {photo_url}")
             return photo_url
 
-    log.warning(f"IMAGO hits found but no URL built for {query!r}; "
-                f"hit[0]={str(hits[0])[:400]}")
+    log.warning(f"IMAGO portrait hits found but no URL built for {query!r}; "
+                f"hit[0]={str(portraits[0])[:400]}")
     return None
