@@ -17,7 +17,7 @@ Env vars:
   IMAGO_API_KEY             (required) — the API key
   IMAGO_API_BASE            default "https://api.imago-images.com/api"
   IMAGO_SEARCH_PATH         default "/search"
-  IMAGO_IMAGE_URL_TEMPLATE  default "https://www.imago-images.de/bild/{db}/{id}/s.jpg"
+  IMAGO_IMAGE_URL_TEMPLATE  default "https://www.imago-images.com/bild/{db}/{id}/s.jpg"
                             ({db} is the 2-char code, {id} is the zero-padded pictureid)
   IMAGO_DEBUG               "1" to log raw responses at INFO (default: logs only on miss)
 
@@ -46,7 +46,7 @@ API_BASE = os.environ.get("IMAGO_API_BASE", "https://api.imago-images.com/api").
 SEARCH_PATH = os.environ.get("IMAGO_SEARCH_PATH", "/search")
 IMAGE_URL_TEMPLATE = os.environ.get(
     "IMAGO_IMAGE_URL_TEMPLATE",
-    "https://www.imago-images.de/bild/{db}/{id}/s.jpg",
+    "https://www.imago-images.com/bild/{db}/{id}/s.jpg",
 )
 DEBUG = os.environ.get("IMAGO_DEBUG", "") == "1"
 
