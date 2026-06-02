@@ -30,6 +30,7 @@ Schema confirmed via imago_probe.py:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -72,10 +73,96 @@ _PREFIX_RE = re.compile(r"^[^A-Za-z]*?\|\s*")          # 🚨🚨| or 🚨🚨�
 _LABEL_RE = re.compile(r"^(?:BREAKING|JUST IN|NEW|OFFICIAL|RECORD)\s*:\s*", re.I)
 _SOURCE_RE = re.compile(r"\[@[^\]]+\]")
 _NON_ASCII_RE = re.compile(r"[^\x00-\x7f]")            # strips leftover emojis/flags
-# Proper-noun matcher — Title-Case word, allowing hyphens and accented chars,
-# optionally joined to more Title-Case words. Matches "Harry Kane", "Al-Khelaifi",
-# "Manchester United", "Rodri", "Mbappé". Excludes all-caps labels.
-_NAME_RE = re.compile(r"\b[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'\-]+(?:\s+[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'\-]+)*\b")
+
+# Proper-noun matcher. First char: capital (incl. accented). Body: one or
+# more lowercase / apostrophe / hyphen (handles "Mbappé", "N'Golo", "Hütter"),
+# optionally followed by a second capital + lowercase run ("D'Ambrosio",
+# "McDonald", "N'Golo"). Multiple Title-Case words joined by spaces are
+# captured as one match ("Harry Kane", "Manchester United"). Lowercase
+# particles like "van" / "de" are also allowed between Title-Case words
+# ("Virgil van Dijk", "Luis de la Fuente").
+_NAME_RE = re.compile(
+    r"\b[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'\-]+(?:[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'\-]*)?"
+    r"(?:\s+(?:van|von|de|del|della|di|da|le|la|el|al|bin|ibn|der|den|dos|do)"
+    r"\s+[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'\-]+)*"
+    r"(?:\s+[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'\-]+(?:[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'\-]*)?)*"
+)
+
+# Football institutions — clubs, leagues, countries used as national teams,
+# governing bodies. Names appearing in a draft that match these get
+# de-prioritised so person names (players, coaches, managers) win.
+# Lowercase-compared so case is irrelevant.
+
+# Tokens whose presence anywhere in a name marks it as a club/league/body.
+# (e.g. any "Manchester United", "Real Madrid", "Bayern X", "X League".)
+_INSTITUTION_TOKENS = {
+    # Generic club prefixes / suffixes
+    "united", "city", "fc", "ac", "cf", "afc", "sc", "town", "wanderers",
+    "albion", "athletic", "athletico", "rovers", "forest", "hotspur",
+    "real", "atletico", "atletic", "bayern", "borussia", "olympique",
+    "inter", "as", "rb", "eintracht", "bayer", "racing", "sporting",
+    "vitoria", "saint",
+    # League / governing body keywords
+    "league", "liga", "bundesliga", "serie", "ligue", "eredivisie",
+    "championship", "champions", "europa", "conference", "uefa", "fifa",
+    "concacaf", "caf", "conmebol", "mls",
+    # National team indicators
+    "national",
+    # Awards & trophies (Golden Shoe/Boot/Ball, Ballon d'Or, FIFA Best, World Cup)
+    "golden", "ballon", "boot", "shoe", "ball", "cup", "trophy", "award",
+    "best",
+}
+
+# Whole-name (lowercased) matches: single-word clubs and country/national-team
+# names that appear in football news.
+_INSTITUTION_NAMES = {
+    # Premier League
+    "barcelona", "liverpool", "arsenal", "chelsea", "tottenham", "newcastle",
+    "brighton", "brentford", "burnley", "everton", "fulham", "leeds",
+    "sheffield", "southampton", "watford", "wolves", "bournemouth",
+    "leicester", "sunderland", "preston", "luton", "ipswich",
+    # La Liga
+    "sevilla", "valencia", "villarreal", "betis", "getafe", "osasuna",
+    "espanyol", "mallorca", "celta", "elche", "levante", "granada", "cadiz",
+    "alaves", "girona", "rayo", "almeria",
+    # Serie A
+    "juventus", "roma", "lazio", "napoli", "atalanta", "fiorentina", "torino",
+    "sassuolo", "bologna", "udinese", "empoli", "sampdoria", "genoa",
+    "verona", "cagliari", "spezia", "salernitana", "lecce", "cremonese",
+    "monza", "milan",
+    # Bundesliga
+    "dortmund", "leipzig", "leverkusen", "frankfurt", "stuttgart", "wolfsburg",
+    "hoffenheim", "schalke", "werder", "hertha", "augsburg", "freiburg",
+    "mainz", "koln", "monchengladbach", "mönchengladbach",
+    # Ligue 1
+    "psg", "marseille", "lyon", "monaco", "lille", "rennes", "nice",
+    "strasbourg", "nantes", "bordeaux", "toulouse", "reims", "brest", "lens",
+    "montpellier", "angers", "lorient", "auxerre", "metz",
+    # Eredivisie
+    "ajax", "psv", "feyenoord", "twente", "utrecht", "alkmaar", "heerenveen",
+    "vitesse", "groningen", "az",
+    # Primeira Liga
+    "porto", "benfica", "braga", "boavista",
+    # Other European
+    "fenerbahce", "galatasaray", "besiktas", "trabzonspor",
+    "celtic", "rangers", "hearts", "hibernian", "aberdeen",
+    "shakhtar", "dynamo", "zenit", "spartak", "cska",
+    # Brazilian / South American
+    "fluminense", "flamengo", "palmeiras", "santos", "corinthians",
+    "river", "boca", "independiente",
+    # Saudi / Asian
+    "alnassr", "alhilal", "alittihad", "alahly", "alshabab",
+    # National teams / countries
+    "england", "france", "germany", "spain", "italy", "portugal",
+    "netherlands", "belgium", "croatia", "morocco", "argentina", "brazil",
+    "uruguay", "colombia", "chile", "mexico", "usa", "japan", "korea",
+    "australia", "qatar", "iran", "iraq", "denmark", "sweden", "norway",
+    "poland", "ukraine", "wales", "scotland", "ireland", "switzerland",
+    "austria", "turkey", "ghana", "senegal", "nigeria", "egypt", "cameroon",
+    "tunisia", "algeria", "ecuador", "peru", "paraguay", "serbia", "russia",
+    "greece", "bulgaria", "romania", "hungary", "czech", "slovakia",
+    "europe", "americas",
+}
 
 
 def _strip_math_bold(s: str) -> str:
@@ -90,22 +177,31 @@ def _deaccent(s: str) -> str:
     return "".join(c for c in nfkd if not unicodedata.combining(c))
 
 
-def query_from_draft(draft: str) -> str:
-    """Derive a clean photo search query — just the subject name — from a draft.
+def _is_institution(name: str) -> bool:
+    """True when a Title-Case name looks like a club, league, governing body,
+    or national-team country rather than a person."""
+    tokens = name.lower().split()
+    if any(t in _INSTITUTION_TOKENS for t in tokens):
+        return True
+    return all(t in _INSTITUTION_NAMES for t in tokens)
 
-    IMAGO matches the query against caption text; long action-phrases like
-    "Harry Kane on winning his second Golden Shoe" return zero hits because
-    no caption contains that exact string. So we extract the first proper-noun
-    sequence ("Harry Kane") and search on that.
 
-    Strategy:
-      1. Clean the first line (strip 🚨 prefix, label, [@source], emojis,
-         bold key-fact glyphs).
-      2. For quote drafts ("🎙"), the speaker name is everything before the
-         first colon — return that directly.
-      3. Otherwise, find proper-noun sequences. Prefer the first multi-word
-         name ("Harry Kane", "Manchester United"); fall back to the first
-         single-word name ("Rodri", "Dante"); fall back to the cleaned line.
+def _normalise(name: str) -> str:
+    """Deaccent + ASCII-only for the API query."""
+    return _NON_ASCII_RE.sub("", _deaccent(name)).strip()[:80]
+
+
+def subjects_from_draft(draft: str, max_subjects: int = 2) -> list:
+    """Extract up to `max_subjects` photo-search subjects from a draft.
+
+    Persons (players, coaches, managers) always win over clubs / leagues /
+    countries — IMAGO returns much sharper photos for "Harry Kane" than for
+    "Tottenham". When the draft mentions multiple persons ("Yan Diomande on
+    Michael Olise", "Pep Guardiola signs Erling Haaland"), returns both so
+    the operator can attach both photos.
+
+    Falls back to a club/league name only when no person names appear, so
+    drafts about "Premier League TV deal" still get a relevant image.
     """
     first = (draft or "").splitlines()[0] if draft else ""
     is_quote = "🎙" in first
@@ -113,24 +209,45 @@ def query_from_draft(draft: str) -> str:
     first = _strip_math_bold(first)
     first = _LABEL_RE.sub("", first)
     first = _SOURCE_RE.sub("", first)
-    # Keep accents here — name extraction needs them so "Adi Hütter" matches
-    # as a 2-word name. Emojis/flags are pre-stripped by _PREFIX_RE; any
-    # leftover symbols in the body don't intersect with the Title-Case regex.
-    first = re.sub(r"^\s*:\s*", "", first)             # orphan colon from stripped label
+    first = re.sub(r"^\s*:\s*", "", first)
     first = re.sub(r"\s+", " ", first).strip(" .,!?-:")
 
+    # For quote drafts, restrict to the speaker line (before the colon) so
+    # the search is about the speaker and any person they're talking about,
+    # not the contents of the quote itself.
     if is_quote and ":" in first:
-        subject = first.split(":")[0].strip()
-    else:
-        names = _NAME_RE.findall(first)
-        multi = [n for n in names if " " in n]
-        subject = multi[0] if multi else (names[0] if names else first)
+        first = first.split(":")[0].strip()
 
-    # Deaccent + ASCII-only at the END, just for the search query, so the
-    # match regex above had the original characters to work with.
-    subject = _deaccent(subject)
-    subject = _NON_ASCII_RE.sub("", subject)
-    return subject.strip()[:80]
+    names = _NAME_RE.findall(first)
+    persons, institutions = [], []
+    for n in names:
+        (institutions if _is_institution(n) else persons).append(n)
+
+    # De-dup while preserving order (case-insensitive).
+    def _dedup(seq):
+        seen, out = set(), []
+        for x in seq:
+            k = x.lower()
+            if k not in seen:
+                seen.add(k)
+                out.append(x)
+        return out
+
+    persons = _dedup(persons)
+    if persons:
+        chosen = persons[:max_subjects]
+    elif institutions:
+        chosen = _dedup(institutions)[:1]
+    else:
+        chosen = [first] if first else []
+
+    return [_normalise(s) for s in chosen if _normalise(s)]
+
+
+# Back-compat shim for callers still using the single-string API.
+def query_from_draft(draft: str) -> str:
+    subs = subjects_from_draft(draft, max_subjects=1)
+    return subs[0] if subs else ""
 
 
 # ─── Search ──────────────────────────────────────────────────────────────────
@@ -258,3 +375,16 @@ async def search_photo(client: httpx.AsyncClient, query: str,
     log.warning(f"IMAGO portrait hits found but no URL built for {query!r}; "
                 f"hit[0]={str(portraits[0])[:400]}")
     return None
+
+
+async def search_photos(client: httpx.AsyncClient, subjects: list,
+                        limit: int = 100) -> list:
+    """Run search_photo() for each subject in parallel; return the URLs
+    (excluding any that returned None / failed)."""
+    if not subjects:
+        return []
+    results = await asyncio.gather(
+        *(search_photo(client, s, limit) for s in subjects),
+        return_exceptions=False,
+    )
+    return [u for u in results if u]

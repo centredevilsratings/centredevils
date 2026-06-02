@@ -602,11 +602,12 @@ async def _draft_article_to_webhook(http: httpx.AsyncClient,
         if draft_already_posted(conn, story_id):
             log.info(f"DUP draft skipped ({story_id}): {title[:60]}")
             return
-        # Prefer a clean IMAGO press photo on every draft; fall back to the
+        # Prefer clean IMAGO press photos on every draft (one per person
+        # subject, up to 2 for multi-person drafts); fall back to the
         # article's own image (og:image) only when IMAGO isn't configured.
         if imago.is_configured():
-            image_url = await imago.search_photo(
-                http, imago.query_from_draft(draft))
+            subjects = imago.subjects_from_draft(draft)
+            image_url = await imago.search_photos(http, subjects)
         ok = await tweet_drafter.post_draft(
             http, webhook_url, draft, url, image_url=image_url,
         )

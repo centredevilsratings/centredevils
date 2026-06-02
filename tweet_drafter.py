@@ -545,7 +545,7 @@ def draft_tweet(claude: anthropic.Anthropic, source_text: str,
 # ─── Discord posting ─────────────────────────────────────────────────────────
 async def post_draft(client: httpx.AsyncClient, webhook_url: str,
                      draft: str, source_url: Optional[str] = None,
-                     image_url: Optional[str] = None,
+                     image_url=None,
                      logo_url: Optional[str] = None) -> bool:
     if not webhook_url:
         return False
@@ -553,10 +553,18 @@ async def post_draft(client: httpx.AsyncClient, webhook_url: str,
     if source_url:
         content += f"\nSource: <{source_url}>"
 
+    # image_url accepts a single URL (str) or a list (multi-subject drafts).
+    if isinstance(image_url, str):
+        urls = [image_url]
+    elif image_url:
+        urls = list(image_url)
+    else:
+        urls = []
+
     payload: dict = {"content": content}
     embeds = []
-    if image_url:
-        embeds.append({"image": {"url": image_url}, "title": "Story photo"})
+    for url in urls:
+        embeds.append({"image": {"url": url}, "title": "Story photo"})
     if logo_url:
         embeds.append({"image": {"url": logo_url}, "title": "Logo"})
     if embeds:
@@ -602,8 +610,8 @@ async def consume_stream(queue: asyncio.Queue,
             # branded graphics / video stills.
             image_url = None
             if imago.is_configured():
-                query = imago.query_from_draft(draft)
-                image_url = await imago.search_photo(http, query)
+                subjects = imago.subjects_from_draft(draft)
+                image_url = await imago.search_photos(http, subjects)
             else:
                 image_url = event.get("image_url")
                 if posts_branded_graphics(event["handle"]):
