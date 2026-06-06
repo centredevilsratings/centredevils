@@ -18,7 +18,7 @@ Env vars:
   IMAGO_ENABLED             "1" / "0" — default "1" (ON). Set to "0" to disable.
   IMAGO_API_BASE            default "https://api.imago-images.com/api"
   IMAGO_SEARCH_PATH         default "/search"
-  IMAGO_IMAGE_URL_TEMPLATE  default "{base}/{db}/{id}/smalls" — the documented
+  IMAGO_IMAGE_URL_TEMPLATE  default "{base}/{db}/{id}/mediums" — the documented
                             preview URL pattern (IMAGO API v1 §4). Anonymous
                             access works (no auth, no CDN shield) — Discord's
                             image proxy can fetch directly. Resolutions:
@@ -52,9 +52,11 @@ API_BASE = os.environ.get("IMAGO_API_BASE", "https://api.imago-images.com/api").
 SEARCH_PATH = os.environ.get("IMAGO_SEARCH_PATH", "/search")
 # Documented preview-URL pattern (IMAGO API v1 §4). Probe confirmed anonymous
 # GET returns image/jpeg bytes — Discord's image proxy fetches it directly.
+# Resolution: "mediums" (~1000px) renders sharply in Discord embeds; "smalls"
+# (420px) is too soft. "thumbs" (192px) is icon-sized.
 IMAGE_URL_TEMPLATE = os.environ.get(
     "IMAGO_IMAGE_URL_TEMPLATE",
-    API_BASE + "/{db}/{id}/smalls",
+    API_BASE + "/{db}/{id}/mediums",
 )
 DEBUG = os.environ.get("IMAGO_DEBUG", "") == "1"
 
