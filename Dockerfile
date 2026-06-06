@@ -17,6 +17,7 @@ COPY x_stream.py .
 COPY tweet_drafter.py .
 COPY imago.py .
 COPY imago_probe.py .
+COPY sonnet_budget.py .
 COPY test_webhooks.py .
 
 # Persistent volume mount point for SQLite DB

@@ -16,6 +16,7 @@ import anthropic
 import httpx
 
 import imago
+import sonnet_budget
 
 log = logging.getLogger("football-bot.tweet_drafter")
 
@@ -195,6 +196,32 @@ RECENCY RULES — CRITICAL, READ CAREFULLY:
 
 SPECIFICITY RULES — CRITICAL:
 The whole point of CentreGoals is to be the FASTEST, MOST DENSE source of football facts. Generic statements waste the reader's time. Every draft must carry at least one concrete data point from the source. If the source has no concrete data, prefer skip=true over a vague draft.
+
+NEWSWORTHINESS GATE — BIAS HARD TOWARD SKIP:
+The bot pays per draft and is on a daily token budget. Most football tweets are NOT newsworthy enough to draft. Apply this gate BEFORE deciding label / line1 / key_fact:
+
+  Would a CentreGoals reader stop scrolling for this draft IF they had ALREADY seen the news from another outlet earlier today? If no → skip=true.
+
+When in doubt, SKIP. We get hundreds of source tweets per day; only the top tier deserves a draft. Specifically, skip=true for:
+
+- Mid-tier rumour without a specific fee / clause / timeline ("club X considering player Y") — even from a credible reporter.
+- Routine squad-rotation, training-fitness, "is doubtful for Sunday" type updates.
+- Generic transfer-window mood pieces ("club expected to be busy", "preparing for the summer").
+- A youth-team or U-21 / U-23 transfer unless the player is genuinely elite (Yamal-tier).
+- A mid-table league cup or domestic cup result UNLESS it's a giant-killing upset.
+- Reporter speculation phrased as "could", "might", "expected to consider".
+- Reaction quotes from non-headline figures (assistant coaches, scouts, agents, fringe players).
+- Anything from a lower league (League One, League Two, National League, etc.) unless an established Premier League / top-5-league name is the subject.
+- Anything where you cannot summarise the news in one sharp sentence with a concrete number / club / date in it.
+
+Pass the gate ONLY when one of these is true:
+- A concrete transfer fact (fee €X, contract years, medical date, "HERE WE GO" by Romano himself, official club announcement).
+- A confirmed injury with a body part + a duration ("hamstring, out 3 weeks").
+- A genuine historic RECORD per the strict bar in RECORD QUALIFICATION RULES.
+- A sensational quote per the QUOTE RULES (controversy, war of words, retirement bombshell — not routine pressers).
+- A sacking, appointment, contract extension that is CONFIRMED.
+
+Big stories are covered by dozens of outlets. The bot's downstream dedup will catch them ONLY if you draft conservatively — every extra borderline draft you produce wastes a Sonnet call AND risks evading dedup if you choose a slightly different framing than the first outlet's draft. When in doubt, SKIP — the bot will draft from the next, cleaner source.
 
 MEN'S FOOTBALL ONLY — HARD SCOPE RULE:
 CentreGoals covers men's professional football exclusively. Set skip=true for anything about women's football: WSL, NWSL, UWCL / Women's Champions League, Women's World Cup, Lionesses, Matildas, USWNT, Liga F, Frauen-Bundesliga, Première Ligue Féminine, Serie A Femminile, Ballon d'Or Féminin, "Arsenal Women", "Chelsea Women", "Barça Femení", any "[Club] Women" framing, or any quote/story whose subject is a women's-football player, coach, or competition. If the source is ambiguous about which side, skip.
@@ -550,6 +577,15 @@ def draft_tweet(claude: anthropic.Anthropic, source_text: str,
     # CentreGoals is men's-football only. Short-circuit before the LLM call.
     if is_womens_football(source_text):
         return None
+    # Daily Sonnet budget cap. When today's spend is at/above the cap, we
+    # skip every drafter call until UTC midnight rolls the counter over.
+    ok, spent = sonnet_budget.under_budget()
+    if not ok:
+        log.warning(
+            f"Sonnet daily cap hit (${spent:.2f} of "
+            f"${sonnet_budget.DAILY_CAP_USD:.2f}); skipping draft"
+        )
+        return None
     user_msg = (
         f"Source tweet by @{handle}"
         + (f" ({author_name})" if author_name else "")
@@ -578,6 +614,12 @@ def draft_tweet(claude: anthropic.Anthropic, source_text: str,
             messages=[{"role": "user", "content": user_msg}],
         )
         raw = msg.content[0].text
+        # Charge the budget regardless of whether the call ends up producing
+        # a draft (skip=true still costs tokens).
+        try:
+            sonnet_budget.record_usage(msg.usage)
+        except Exception as bg_e:
+            log.warning(f"Sonnet budget record failed: {bg_e}")
     except Exception as e:
         log.warning(f"Claude drafter call failed: {e}")
         return None
@@ -591,6 +633,61 @@ def draft_tweet(claude: anthropic.Anthropic, source_text: str,
         return None
     story_id = (parsed.get("story_id") or "").strip().lower()
     return (draft, story_id)
+
+
+# ─── Cross-outlet content dedup ──────────────────────────────────────────────
+# story_id is model-generated and varies across outlets/framings even with the
+# strict recipe in the prompt. soft_dedup_key is bot-extracted from the
+# rendered draft text — same subject + same action class = same key, no matter
+# which outlet wrote it. Used as a secondary dedup signal alongside story_id.
+# Order matters in the action-keyword table — more specific patterns first.
+_ACTION_KEYWORDS = [
+    ("sacking",     ("sacked", "parts ways", "dismissed", "relieved of")),
+    ("appointment", ("appointed", "named manager", "named head coach",
+                     "becomes head coach", "new head coach", "new manager")),
+    ("injury",      ("muscle injury", " acl ", "hamstring", "out for ",
+                     "out until", "weeks out", "ruled out", "tear",
+                     "fractured", "knee injury", "ankle injury")),
+    ("retirement",  ("retire", "retirement", "hang up", "hangs up",
+                     "final season")),
+    ("extension",   ("extends", "extension", "new contract", "renew",
+                     "release clause", "signs new deal", "fresh terms")),
+    ("rejection",   ("rejected", "rebuffed", "turned down", "knocked back")),
+    ("loan",        (" loan ", "loan move", "loan deal", "loan with option")),
+    ("record",      ("most decorated", "highest", "fewest", "oldest",
+                     "youngest", "first since", "only team", "longest",
+                     "fastest", "record", " ever ", "in history")),
+    ("transfer",    ("done deal", "here we go", "agreed", "agree fee",
+                     "completed", "signed", "signing", " bid ", "submit bid",
+                     "release-clause bid", "approach", "offered", "interest",
+                     " talks", "monitoring", "eyeing", "linked", "transfer")),
+]
+
+
+def soft_dedup_key(draft: str) -> str:
+    """Content-based dedup fingerprint extracted from the rendered draft.
+
+    Deterministic: same subject + same action class produces the same key,
+    regardless of which outlet posted it or how they phrased it. Empty
+    string when no subject can be extracted (caller falls back to story_id).
+    """
+    if not draft:
+        return ""
+    subjects = imago.subjects_from_draft(draft, max_subjects=1)
+    if not subjects:
+        return ""
+    subject = subjects[0].lower().strip().replace(" ", "-")
+
+    text = " " + draft.lower() + " "                  # pad for word-boundary
+    if "🎙" in draft:
+        action = "quote"
+    else:
+        action = "news"                                # generic fallback
+        for label, keywords in _ACTION_KEYWORDS:
+            if any(k in text for k in keywords):
+                action = label
+                break
+    return f"{subject}|{action}"
 
 
 # ─── Discord posting ─────────────────────────────────────────────────────────
@@ -650,8 +747,12 @@ async def consume_stream(queue: asyncio.Queue,
             if not result:
                 continue
             draft, story_id = result
-            if dedup_check and dedup_check(story_id):
-                log.info(f"DUP draft skipped ({story_id}): {draft[:60]}")
+            soft_key = soft_dedup_key(draft)
+            if dedup_check and dedup_check(story_id, soft_key):
+                log.info(
+                    f"DUP draft skipped (story={story_id} soft={soft_key}): "
+                    f"{draft[:60]}"
+                )
                 continue
             source_url = f"https://twitter.com/{event['handle']}/status/{event['id']}"
             # Photo selection. When IMAGO is configured we fetch a clean
@@ -671,7 +772,7 @@ async def consume_stream(queue: asyncio.Queue,
                                   image_url=image_url)
             if ok:
                 if dedup_record:
-                    dedup_record(story_id)
+                    dedup_record(story_id, soft_key)
                 log.info(f"Drafted from @{event['handle']}: {draft[:60]}")
         except Exception as e:
             log.error(f"Drafter consumer error: {e}", exc_info=True)

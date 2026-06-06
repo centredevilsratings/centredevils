@@ -14,6 +14,7 @@ services:
       - OTHER_LEAGUES_WEBHOOK=${OTHER_LEAGUES_WEBHOOK}
       - IMAGO_API_USER=${IMAGO_API_USER}
       - IMAGO_API_KEY=${IMAGO_API_KEY}
+      - SONNET_DAILY_CAP_USD=${SONNET_DAILY_CAP_USD:-10.0}
       - DB_PATH=/data/football_ops.db
     volumes:
       - football_data:/data

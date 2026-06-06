@@ -291,6 +291,12 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_league ON articles(league)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_post_log ON post_log(webhook_key, posted_at)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_draft_log ON draft_log(posted_at)")
+    # Cross-outlet content dedup uses soft_key as a secondary signal alongside
+    # the model-generated story_id. Forward-migration: add the column if the
+    # existing draft_log was created before this code shipped.
+    _ensure_columns(conn, "draft_log", {"soft_key": "TEXT"})
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_draft_log_soft "
+                 "ON draft_log(soft_key, posted_at)")
 
     _ensure_columns(conn, "articles", {
         "title_original": "TEXT",
@@ -346,30 +352,48 @@ def hourly_cap_record(conn: sqlite3.Connection, key: str) -> None:
     conn.commit()
 
 
-# ─── Draft dedup (story_id-based, 12h window) ────────────────────────────────
-DRAFT_DEDUP_WINDOW = 12 * 3600
+# ─── Draft dedup (24h window — story_id + soft_key cross-outlet match) ───────
+# Two-signal dedup catches the same story even when different outlets phrase it
+# differently. story_id is model-generated (the deterministic recipe in the
+# drafter prompt); soft_key is bot-extracted from the rendered draft
+# (subject + action class). If EITHER matches a recent entry, skip.
+DRAFT_DEDUP_WINDOW = 24 * 3600
 
 
-def draft_already_posted(conn: sqlite3.Connection, story_id: str) -> bool:
-    if not story_id:
-        return False
+def draft_already_posted(conn: sqlite3.Connection,
+                         story_id: str, soft_key: str = "") -> bool:
     cutoff = int(time.time()) - DRAFT_DEDUP_WINDOW
-    row = conn.execute(
-        "SELECT 1 FROM draft_log WHERE story_id=? AND posted_at>? LIMIT 1",
-        (story_id, cutoff),
-    ).fetchone()
-    return row is not None
+    if story_id:
+        row = conn.execute(
+            "SELECT 1 FROM draft_log WHERE story_id=? AND posted_at>? LIMIT 1",
+            (story_id, cutoff),
+        ).fetchone()
+        if row:
+            return True
+    if soft_key:
+        row = conn.execute(
+            "SELECT 1 FROM draft_log WHERE soft_key=? AND posted_at>? LIMIT 1",
+            (soft_key, cutoff),
+        ).fetchone()
+        if row:
+            return True
+    return False
 
 
-def record_draft_posted(conn: sqlite3.Connection, story_id: str) -> None:
-    if not story_id:
+def record_draft_posted(conn: sqlite3.Connection,
+                        story_id: str, soft_key: str = "") -> None:
+    if not story_id and not soft_key:
         return
     now = int(time.time())
+    # story_id is PK when available; otherwise key on soft_key so we still
+    # land a row in the dedup table.
+    pk = story_id or f"sk:{soft_key}"
     conn.execute(
-        "INSERT OR REPLACE INTO draft_log(story_id, posted_at) VALUES (?, ?)",
-        (story_id, now),
+        "INSERT OR REPLACE INTO draft_log(story_id, soft_key, posted_at) "
+        "VALUES (?, ?, ?)",
+        (pk, soft_key or None, now),
     )
-    # Prune entries older than 48h.
+    # Prune entries older than 48h (still keep ~2x window for safety margin).
     conn.execute("DELETE FROM draft_log WHERE posted_at < ?",
                  (now - 48 * 3600,))
     conn.commit()
@@ -599,8 +623,12 @@ async def _draft_article_to_webhook(http: httpx.AsyncClient,
         if not result:
             return
         draft, story_id = result
-        if draft_already_posted(conn, story_id):
-            log.info(f"DUP draft skipped ({story_id}): {title[:60]}")
+        soft_key = tweet_drafter.soft_dedup_key(draft)
+        if draft_already_posted(conn, story_id, soft_key):
+            log.info(
+                f"DUP draft skipped (story={story_id} soft={soft_key}): "
+                f"{title[:60]}"
+            )
             return
         # Prefer clean IMAGO press photos on every draft (one per person
         # subject, up to 2 for multi-person drafts); fall back to the
@@ -612,7 +640,7 @@ async def _draft_article_to_webhook(http: httpx.AsyncClient,
             http, webhook_url, draft, url, image_url=image_url,
         )
         if ok:
-            record_draft_posted(conn, story_id)
+            record_draft_posted(conn, story_id, soft_key)
             log.info(f"Drafted (article, {story_id}): {draft[:80]}")
     except Exception as e:
         log.error(f"Article drafter failed: {e}", exc_info=True)
@@ -945,8 +973,8 @@ async def main():
                     claude_client,
                     client,
                     drafts_webhook,
-                    dedup_check=lambda sid: draft_already_posted(conn, sid),
-                    dedup_record=lambda sid: record_draft_posted(conn, sid),
+                    dedup_check=lambda sid, sk: draft_already_posted(conn, sid, sk),
+                    dedup_record=lambda sid, sk: record_draft_posted(conn, sid, sk),
                 )))
             except Exception as e:
                 log.error(f"Failed to start X stream: {e}", exc_info=True)
