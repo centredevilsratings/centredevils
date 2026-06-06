@@ -114,7 +114,7 @@ DRAFTER_SYSTEM = """You draft CentreGoals tweets — concise, breaking-style foo
   "quote_speaker": "Speaker name, optionally followed by 'on <topic>' (e.g. 'Mikel Arteta on penalty selection', 'Nasser Al-Khelaifi', 'Vinicius Jr on the referee'). No trailing colon — we add it. REQUIRED when is_quote=true, else empty string.",
   "quote_text": "The verbatim quote. Use a blank line (two newlines: \\n\\n) to separate distinct quote paragraphs when a single quote spans multiple paragraphs. NO surrounding quotation marks — we add them per journalistic convention (each paragraph opens with \", only the last paragraph closes with \"). REQUIRED when is_quote=true, else empty string.",
   "quote_emoji": "Optional ONE emoji rendered after the closing quotation mark of the LAST paragraph (e.g. ❤️ for affection, 🔥 for spicy, 🤯 for shocking, 😤 for furious, 🐐 for GOATed). Empty string if not adding one.",
-  "story_id": "Stable kebab-case slug uniquely identifying THIS underlying story for deduplication. Format: <player-or-subject>-<club>-<action>, lowercase, max 6 words, hyphenated. MUST be identical for EVERY different framing of the same underlying event."
+  "story_id": "Deterministic dedup slug. Use this EXACT recipe — every reframing of the same underlying event MUST produce the same slug, regardless of source, wording, or which side of the deal is led with.\n\nFORMAT: <primary-subject-slug>-<action-keyword>[-<counterparty-slug>]\n\nRules:\n  1. primary-subject-slug = the PERSON the news is fundamentally about (the player being signed / the manager being sacked / the player injured / the quote speaker). Lowercase, ASCII, hyphen-separated full name (e.g. 'kevin-de-bruyne', 'joao-neves', 'luis-enrique'). NEVER use the club as the primary subject when a person exists.\n  2. action-keyword = ONE keyword from this CLOSED vocabulary — do not invent new ones:\n     transfer | extension | loan | sacking | appointment | injury | retirement | quote | record | rejection | recall | departure | suspension | ban\n     (Use 'transfer' for any signing / done-deal / agreement / bid / interest / link. Use 'quote' for ALL quotes. Use 'record' for ALL records.)\n  3. counterparty-slug = optional, lowercase ASCII club slug, ONLY when a specific club is the OTHER side of the transaction (the destination club for a transfer, the club doing the sacking/appointing). Omit for injuries, retirements, quotes, records, or when no specific club is involved.\n\nExamples — these MUST all collide:\n  'Real Madrid sign Hincapié for €60m' → 'piero-hincapie-transfer-real-madrid'\n  'Hincapié on his way to Madrid' → 'piero-hincapie-transfer-real-madrid'\n  'Leverkusen accept €60m for Hincapié from Real Madrid' → 'piero-hincapie-transfer-real-madrid'\n  'João Neves extends at PSG until 2030' → 'joao-neves-extension'\n  'PSG renew João Neves' → 'joao-neves-extension'\n  'Neves signs new PSG contract' → 'joao-neves-extension'\n  'Arteta sacked by Arsenal' → 'mikel-arteta-sacking-arsenal'\n  'Arsenal part ways with Arteta' → 'mikel-arteta-sacking-arsenal'\n  'Neymar muscle injury, out 2-3 weeks' → 'neymar-injury'\n  'Al-Khelaifi praises Luis Enrique' → 'nasser-al-khelaifi-quote'\n  'Luis Enrique most decorated PSG manager' → 'luis-enrique-record'\n\nEmpty string when skip=true."
 }
 
 VOICE RULES:
@@ -175,6 +175,14 @@ NO-FABRICATION RULE — ABSOLUTE:
 - You may ONLY use facts that appear in the source text. NEVER invent fees, contract lengths, dates, ages, nationalities, decision-makers, rival clubs, medical dates, or any other detail that is not literally present in the source.
 - If a fact is uncertain or paraphrased in the source ("reportedly", "claims", "according to"), hedge in your draft ("reportedly", "per reports").
 - If you find yourself wanting to write something that "sounds plausible" but isn't in the source — stop and either drop that detail or set skip=true.
+
+NO-STALE-AFFILIATION RULE — READ THIS:
+This is the single most common hallucination mode. Players and managers change clubs frequently. Your training data is older than reality.
+- NEVER attach a club / national-team / role / age / position descriptor to a person UNLESS the source text literally names that descriptor next to that person. If the source says "Kevin De Bruyne signs new deal", do NOT write "Man City midfielder Kevin De Bruyne" — even if you "know" he plays there. He may have moved.
+- NEVER write phrases like "[Club] midfielder X", "[Club] striker Y", "[Country] international Z", "[Manager] of [Club]", "veteran defender", "former [Club] player", "the 25-year-old", or any other descriptor unless THAT EXACT PAIRING appears in the source.
+- The ONLY safe defaults: bare name (e.g. "Kevin De Bruyne"), or the descriptor the source itself uses.
+- If the source attaches a club to the person (e.g. "PSG's João Neves extends"), you may carry that pairing into the draft. Otherwise: bare name only.
+- This applies to line1_template AND context. The context sentence is the most common offender — do NOT pad with club/role color the source did not give you.
 
 "HERE WE GO" RULE — STRICTEST, READ TWICE:
 "HERE WE GO" is the trademarked catchphrase of Fabrizio Romano (@FabrizioRomano). You may ONLY use it as the key_fact if BOTH of these conditions hold:
@@ -521,9 +529,24 @@ def draft_tweet(claude: anthropic.Anthropic, source_text: str,
     )
     try:
         msg = claude.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-sonnet-4-6",
             max_tokens=500,
-            system=DRAFTER_SYSTEM,
+            # Content-generation task with strict JSON output — disable
+            # thinking and use low effort (per Sonnet 4.6 migration guidance,
+            # 4.6 defaults to "high" effort which is overkill here and triples
+            # latency/cost for no quality lift on this kind of work).
+            thinking={"type": "disabled"},
+            output_config={"effort": "low"},
+            # DRAFTER_SYSTEM is ~10K tokens of rules + few-shot examples and
+            # is identical across every draft. Cache it so each draft pays
+            # the ~0.1x read price instead of the full input price.
+            system=[
+                {
+                    "type": "text",
+                    "text": DRAFTER_SYSTEM,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=[{"role": "user", "content": user_msg}],
         )
         raw = msg.content[0].text
