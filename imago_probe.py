@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 """
-Standalone IMAGO API schema probe.
+IMAGO API probe — confirm the documented preview-URL and /download paths
+work against our customer base, before wiring them into imago.py.
 
-Run this from anywhere the network can reach api.imago-images.com (e.g. a
-Render shell, or locally) to confirm the live request/response schema so the
-imago.py client can be calibrated.
+Per the official spec (PDF v1, 12.06.25):
+  - Preview URL format: {API-URL}/{db-2-letter}/{pictureid}/{resolution-name}
+    db: "st" | "sp"
+    resolution: "thumbs" (192px) | "smalls" (420px) | "mediums" (1000px)
+    e.g. https://API-URL.imago-images.de/st/95739952/smalls
+  - Download endpoint: POST {API-URL}/download with JSON body
+    {"pictureid": "...", "db": "stock"|"sport", "res": 1|2|4|8|9}
+    Returns raw image/jpeg bytes on success.
 
-Usage:
-    IMAGO_API_USER=imagoapi IMAGO_API_KEY=... python imago_probe.py "Lionel Messi"
-
-It tries a few plausible search payloads against {base}{path} and dumps the
-HTTP status + a slice of each response body. Send me the output and I'll lock
-imago.py's parser/URL template to the real schema.
+Our /search works at https://api.imago-images.com/api/search, so we treat
+https://api.imago-images.com/api as the customer-base. We test the preview
+URL with and without auth headers (Discord's image proxy won't send auth —
+the preview URL has to work anonymously OR we have to use /download +
+re-upload as a Discord attachment).
 """
 
 import json
@@ -24,67 +29,70 @@ API_USER = os.environ.get("IMAGO_API_USER", "")
 API_KEY = os.environ.get("IMAGO_API_KEY", "")
 BASE = os.environ.get("IMAGO_API_BASE", "https://api.imago-images.com/api").rstrip("/")
 
-QUERY = sys.argv[1] if len(sys.argv) > 1 else "soccer"
+# Known-good picture from earlier probes (Messi statue, db=stock).
+PID = os.environ.get("IMAGO_PROBE_PID", "858068900")
+DB_FULL = "stock"
+DB_SHORT = "st"
 
-# Auth-scheme candidates — first probe revealed api-user/api-key headers
-# return 401 "Invalid Username or Password" (classic Basic Auth phrasing),
-# so Basic is the prime suspect.
-AUTH_SCHEMES = [
-    ("basic", {}),                                                # httpx.BasicAuth
-    ("bearer", {"Authorization": f"Bearer {API_KEY}"}),
-    ("api-key-header", {"X-API-Key": API_KEY, "X-API-User": API_USER}),
-    ("legacy-lowercase", {"api-user": API_USER, "api-key": API_KEY}),
-]
+AUTH_HEADERS = {"X-API-User": API_USER, "X-API-Key": API_KEY}
 
-PAYLOADS = [
-    ("POST", "/search", {"searchquery": QUERY, "querystring": QUERY, "size": 3, "from": 0}),
-    ("POST", "/search", {"query": QUERY, "size": 3}),
-    ("GET",  "/search", {"q": QUERY, "size": 3}),
-]
+
+def _dump(label: str, r: httpx.Response) -> None:
+    ct = r.headers.get("content-type", "")
+    print(f"  [{label}] HTTP {r.status_code}  content-type={ct}  len={len(r.content)}")
+    if ct.startswith("image/"):
+        sig = r.content[:8].hex()
+        print(f"    -> {sig}  (FFD8FF... = real JPEG)")
+    else:
+        print(f"    body: {r.text[:300]}")
 
 
 def main() -> None:
     if not (API_USER and API_KEY):
-        print("ERROR: set IMAGO_API_USER and IMAGO_API_KEY env vars")
+        print("ERROR: set IMAGO_API_USER and IMAGO_API_KEY")
         sys.exit(1)
 
-    print(f"Base: {BASE}\nUser: {API_USER}\nQuery: {QUERY!r}\n" + "=" * 60)
+    print(f"Base: {BASE}\nPID:  {PID}  db={DB_FULL}/{DB_SHORT}\n" + "=" * 60)
 
-    with httpx.Client(timeout=20) as client:
-        for scheme_name, extra_headers in AUTH_SCHEMES:
-            print(f"\n########## AUTH SCHEME: {scheme_name} ##########")
-            auth = httpx.BasicAuth(API_USER, API_KEY) if scheme_name == "basic" else None
-            headers = {"Content-Type": "application/json",
-                       "Accept": "application/json", **extra_headers}
+    with httpx.Client(timeout=20, follow_redirects=False) as c:
+        # === A. Preview URL — the simple path if it works anonymously ===
+        for res_name in ("smalls", "mediums", "thumbs"):
+            url = f"{BASE}/{DB_SHORT}/{PID}/{res_name}"
+            print(f"\n>>> preview URL  {url}")
+            try:
+                r = c.get(url)  # no auth headers — Discord can't send any
+                _dump("anon", r)
+            except Exception as e:
+                print(f"  [anon] ERR {e}")
+            try:
+                r = c.get(url, headers=AUTH_HEADERS)
+                _dump("auth", r)
+            except Exception as e:
+                print(f"  [auth] ERR {e}")
 
-            for method, path, params in PAYLOADS:
-                url = f"{BASE}{path}"
-                print(f"\n>>> {method} {url}\n    payload={params}")
-                try:
-                    if method == "POST":
-                        r = client.post(url, json=params, headers=headers, auth=auth)
-                    else:
-                        r = client.get(url, params=params, headers=headers, auth=auth)
-                except Exception as e:
-                    print(f"    EXCEPTION: {e}")
-                    continue
-                print(f"    HTTP {r.status_code}  "
-                      f"content-type={r.headers.get('content-type')}")
-                body = r.text
-                try:
-                    parsed = r.json()
-                    body = json.dumps(parsed, indent=2, ensure_ascii=False)
-                    if isinstance(parsed, dict):
-                        print(f"    top-level keys: {list(parsed.keys())}")
-                except Exception:
-                    pass
-                print("    body (first 1500 chars):")
-                print("    " + body[:1500].replace("\n", "\n    "))
-                # Quick success short-circuit so output stays readable.
-                if r.status_code == 200:
-                    print(f"\n*** SUCCESS with scheme={scheme_name}, "
-                          f"{method} {path}, payload-keys={list(params.keys())} ***")
-                    return
+        # === B. /download — POST with body, returns bytes ===
+        print(f"\n>>> POST {BASE}/download   (db={DB_FULL}, res=2)")
+        try:
+            r = c.post(
+                f"{BASE}/download",
+                headers={**AUTH_HEADERS, "Content-Type": "application/json"},
+                json={"pictureid": PID, "db": DB_FULL, "res": 2},
+            )
+            _dump("download/2", r)
+        except Exception as e:
+            print(f"  ERR {e}")
+
+        # Some APIs want res as a string per the docs ("res": "1") — try that too.
+        print(f"\n>>> POST {BASE}/download   (db={DB_FULL}, res='2' as string)")
+        try:
+            r = c.post(
+                f"{BASE}/download",
+                headers={**AUTH_HEADERS, "Content-Type": "application/json"},
+                json={"pictureid": str(PID), "db": DB_FULL, "res": "2"},
+            )
+            _dump("download/2-str", r)
+        except Exception as e:
+            print(f"  ERR {e}")
 
 
 if __name__ == "__main__":
