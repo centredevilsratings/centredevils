@@ -695,30 +695,24 @@ def soft_dedup_key(draft: str) -> str:
 # ─── Discord posting ─────────────────────────────────────────────────────────
 async def post_draft(client: httpx.AsyncClient, webhook_url: str,
                      draft: str, source_url: Optional[str] = None,
-                     image_url=None,
-                     logo_url: Optional[str] = None) -> bool:
+                     logo_url: Optional[str] = None,
+                     **_ignored) -> bool:
+    """Post a draft to the Discord webhook as text + source link.
+
+    Per operator decision the bot no longer attaches any photo — neither
+    IMAGO press photos nor the tweet's / article's own image. The
+    image_url / image_urls kwargs are still accepted (and ignored) so
+    we don't break any older call sites mid-deploy.
+    """
     if not webhook_url:
         return False
     content = f"```\n{draft}\n```"
     if source_url:
         content += f"\nSource: <{source_url}>"
 
-    # image_url accepts a single URL (str) or a list (multi-subject drafts).
-    if isinstance(image_url, str):
-        urls = [image_url]
-    elif image_url:
-        urls = list(image_url)
-    else:
-        urls = []
-
     payload: dict = {"content": content}
-    embeds = []
-    for url in urls:
-        embeds.append({"image": {"url": url}, "title": "Story photo"})
     if logo_url:
-        embeds.append({"image": {"url": logo_url}, "title": "Logo"})
-    if embeds:
-        payload["embeds"] = embeds
+        payload["embeds"] = [{"image": {"url": logo_url}, "title": "Logo"}]
 
     try:
         resp = await client.post(webhook_url, json=payload, timeout=10)
@@ -757,21 +751,8 @@ async def consume_stream(queue: asyncio.Queue,
                 )
                 continue
             source_url = f"https://twitter.com/{event['handle']}/status/{event['id']}"
-            # Photo selection. When IMAGO is configured we fetch a clean
-            # licensed press photo for EVERY draft (operator's choice),
-            # falling back to no photo if IMAGO returns nothing. When IMAGO
-            # is not configured, fall back to the tweet's own media minus
-            # branded graphics / video stills.
-            image_url = None
-            if imago.is_configured():
-                subjects = imago.subjects_from_draft(draft)
-                image_url = await imago.search_photos(http, subjects)
-            else:
-                image_url = event.get("image_url")
-                if posts_branded_graphics(event["handle"]):
-                    image_url = None
-            ok = await post_draft(http, webhook_url, draft, source_url,
-                                  image_url=image_url)
+            # No photo attached — drafts are text + source link only.
+            ok = await post_draft(http, webhook_url, draft, source_url)
             if ok:
                 if dedup_record:
                     dedup_record(story_id, soft_key)

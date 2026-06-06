@@ -614,8 +614,13 @@ async def _draft_article_to_webhook(http: httpx.AsyncClient,
                                     webhook_url: str,
                                     title: str, summary: str,
                                     source: str, url: str,
-                                    image_url: Optional[str] = None) -> None:
-    """Fire-and-forget: draft a CentreGoals tweet from an article and post it."""
+                                    **_ignored) -> None:
+    """Fire-and-forget: draft a CentreGoals tweet from an article and post it.
+
+    No photo is attached — drafts are text + source link only. The image_url
+    kwarg is accepted but ignored for backward compatibility with any caller
+    still passing it.
+    """
     try:
         result = await asyncio.to_thread(
             tweet_drafter.draft_article, claude_client, title, summary, source,
@@ -630,15 +635,7 @@ async def _draft_article_to_webhook(http: httpx.AsyncClient,
                 f"{title[:60]}"
             )
             return
-        # Prefer clean IMAGO press photos on every draft (one per person
-        # subject, up to 2 for multi-person drafts); fall back to the
-        # article's own image (og:image) only when IMAGO isn't configured.
-        if imago.is_configured():
-            subjects = imago.subjects_from_draft(draft)
-            image_url = await imago.search_photos(http, subjects)
-        ok = await tweet_drafter.post_draft(
-            http, webhook_url, draft, url, image_url=image_url,
-        )
+        ok = await tweet_drafter.post_draft(http, webhook_url, draft, url)
         if ok:
             record_draft_posted(conn, story_id, soft_key)
             log.info(f"Drafted (article, {story_id}): {draft[:80]}")
