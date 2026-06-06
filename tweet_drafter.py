@@ -156,6 +156,33 @@ Stats accounts (@OptaJoe, @OptaJose, @OptaPaolo, @OptaFranz, @OptaJean, @OptaJoa
 - null label → softer secondary stories.
 - key_fact must be the SINGLE most operationally important phrase. Keep it 1-3 words.
 - Common key_fact values: MUSCLE INJURY, ACL INJURY, DONE DEAL, HERE WE GO, AGREED, SIGNED, LEAVE, SACKED, RETIRING, EXTENDS, REJECTED, RECALLED, EYEING, LINKED.
+
+KEY_FACT SELECTION — READ CAREFULLY (Haiku was picking the wrong word):
+The key_fact is the word that gets visually HIGHLIGHTED (rendered in a bold math-font) in the final tweet. It must be the WHY of the story — the news payload. Read the line aloud with the key_fact emphasised — if the emphasis lands on noise, you picked wrong.
+
+The key_fact is what answers: "If a reader only saw the bolded word(s) and nothing else, would they know what just happened?"
+
+PICK the action / outcome / verdict / dollar-amount / record-superlative:
+  ✓ "DONE DEAL"   ("Rashford to Barcelona, DONE DEAL!")
+  ✓ "MUSCLE INJURY"  ("Neymar has suffered a MUSCLE INJURY...")
+  ✓ "SACKED"   ("Arteta SACKED by Arsenal.")
+  ✓ "€60M BID"   ("Real Madrid submit €60M BID for Hincapié...")
+  ✓ "RELEASE CLAUSE"  ("...RELEASE CLAUSE of €60m.")
+  ✓ "HIGHEST"   ("Luis Enrique has the HIGHEST win % of any manager...")
+  ✓ "MOST DECORATED"  ("Luis Enrique becomes MOST DECORATED PSG manager...")
+  ✓ "JUNE 2029"  ("Real Madrid appoint Mourinho as Head Coach until JUNE 2029.")
+
+DO NOT pick filler / connectives / context / generic intensifiers:
+  ✗ "AFTER"   (in "...LEAVE USA after the World Cup")
+  ✗ "THIS"    ("THIS season", "THIS summer")
+  ✗ "NEW"     (the label already says NEW; bolding it twice is noise)
+  ✗ "SECOND"  / "FIRST" / "THIRD" — bare ordinals are weak; bold the THING (e.g. GOLDEN SHOE), not the count
+  ✗ "ALSO"    / "ONLY" / "ALREADY" / "STILL" / "JUST" — intensifiers, not facts
+  ✗ "RETURNS" — too vague; prefer the destination/role (e.g. "BAYERN MUNICH" or "HEAD COACH")
+  ✗ Bolding a person's name or a club's name (the names already carry weight; bold the verb/outcome instead)
+  ✗ "SPYGATE" or other event nicknames when the actual news is the action (e.g. APOLOGISES, TAKES RESPONSIBILITY, SACKED)
+
+Self-check before returning: re-read line1_template with {{KEY}} replaced. If the bolded phrase reads as a connective or modifier, swap it for the verb/outcome/amount. If nothing in the source actually qualifies as a strong key_fact, set skip=true rather than bolding noise.
 - NO hashtags. NO markdown around the JSON. NO emojis except those in emoji_flag.
 - skip=true examples: retweets, replies, link-only "see thread below" posts, ranked top-10 lists, opinion takes, podcast/video plugs, off-topic personal posts.
 
