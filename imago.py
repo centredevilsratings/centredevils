@@ -15,17 +15,14 @@ the first real run. See imago_probe.py for a standalone schema probe.
 Env vars:
   IMAGO_API_USER            (required) — "imagoapi"
   IMAGO_API_KEY             (required) — the API key
-  IMAGO_ENABLED             "1" to turn the integration on. Defaults to OFF
-                            because imago-images.com is behind a BunnyCDN
-                            JS-challenge shield that 403s every non-browser
-                            fetcher (including Discord's image proxy) — see
-                            the diagnosis in the commit history. Flip to "1"
-                            once IMAGO confirms a working download endpoint.
+  IMAGO_ENABLED             "1" / "0" — default "1" (ON). Set to "0" to disable.
   IMAGO_API_BASE            default "https://api.imago-images.com/api"
   IMAGO_SEARCH_PATH         default "/search"
-  IMAGO_IMAGE_URL_TEMPLATE  default "https://www.imago-images.com/bild/{db}/{id}/w.jpg"
-                            ({db} is the 2-char code, {id} is the zero-padded pictureid;
-                             "w.jpg" is the web/direct JPG — "s.jpg" returns an HTML page)
+  IMAGO_IMAGE_URL_TEMPLATE  default "{base}/{db}/{id}/smalls" — the documented
+                            preview URL pattern (IMAGO API v1 §4). Anonymous
+                            access works (no auth, no CDN shield) — Discord's
+                            image proxy can fetch directly. Resolutions:
+                            "thumbs" 192px / "smalls" 420px / "mediums" 1000px.
   IMAGO_DEBUG               "1" to log raw responses at INFO (default: logs only on miss)
 
 Schema confirmed via imago_probe.py:
@@ -50,12 +47,14 @@ log = logging.getLogger("football-bot.imago")
 
 API_USER = os.environ.get("IMAGO_API_USER", "")
 API_KEY = os.environ.get("IMAGO_API_KEY", "")
-ENABLED = os.environ.get("IMAGO_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
+ENABLED = os.environ.get("IMAGO_ENABLED", "1").strip().lower() in ("1", "true", "yes", "on")
 API_BASE = os.environ.get("IMAGO_API_BASE", "https://api.imago-images.com/api").rstrip("/")
 SEARCH_PATH = os.environ.get("IMAGO_SEARCH_PATH", "/search")
+# Documented preview-URL pattern (IMAGO API v1 §4). Probe confirmed anonymous
+# GET returns image/jpeg bytes — Discord's image proxy fetches it directly.
 IMAGE_URL_TEMPLATE = os.environ.get(
     "IMAGO_IMAGE_URL_TEMPLATE",
-    "https://www.imago-images.com/bild/{db}/{id}/w.jpg",
+    API_BASE + "/{db}/{id}/smalls",
 )
 DEBUG = os.environ.get("IMAGO_DEBUG", "") == "1"
 
@@ -293,10 +292,13 @@ def _extract_hits(data) -> list:
 
 
 def _hit_to_url(hit: dict) -> Optional[str]:
-    """Build a thumbnail URL from a pictures[] entry.
+    """Build a preview URL from a pictures[] entry.
 
     Schema: {"pictureid": int, "db": "stock"|"sport", ...}
-    URL pattern: https://www.imago-images.de/bild/{db_slug}/{id_zero_padded_10}/s.jpg
+    URL pattern: {base}/{db_2letter}/{pictureid}/smalls
+    Per the IMAGO API v1 spec §4. pictureid is the raw integer (NOT
+    zero-padded — that was a wrong guess from the earlier www.imago-images
+    URL pattern).
     """
     if not isinstance(hit, dict):
         return None
@@ -305,9 +307,8 @@ def _hit_to_url(hit: dict) -> Optional[str]:
         return None
     db_raw = str(hit.get("db") or "stock").lower()
     db = _DB_MAP.get(db_raw, db_raw[:2])
-    pid_str = str(pid).zfill(10)
     try:
-        return IMAGE_URL_TEMPLATE.format(db=db, id=pid_str)
+        return IMAGE_URL_TEMPLATE.format(db=db, id=pid)
     except Exception:
         return None
 
