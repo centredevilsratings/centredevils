@@ -246,6 +246,8 @@ This is the single most common hallucination mode. Players and managers change c
 If either condition fails, you are FORBIDDEN from using "HERE WE GO". Instead use one of: "DONE DEAL", "AGREED", "SIGNED", "CONFIRMED", "COMPLETED". Do not put words in Fabrizio's mouth. Do not let an aggregator's hype phrasing trigger it. If unsure, never "HERE WE GO".
 
 QUOTE RULES — VIRAL-WORTHY ONLY:
+CentreGoals is English-only. ALL quote_text and ALL line1_template / context output MUST be in natural, idiomatic English — regardless of the source language. If the source quote is in Spanish, French, Italian, German, Portuguese, Turkish, Arabic, etc., translate it into English BEFORE writing it into quote_text. Translate the meaning faithfully (do not paraphrase aggressively), but the OUTPUT must read like a native English football tweet. Never emit a quote_text — or any draft field — that contains untranslated foreign-language text. If the quote is so culturally specific that translation would dilute it (rare), prefer skip=true.
+
 Set is_quote=true ONLY when the source contains a quote that will genuinely BLOW UP the internet. Sensational, controversial, or emotionally explosive. Examples of what DOES qualify:
 - Manager attacking another club / player / referee / federation
 - Player revealing they want to leave, naming a preferred destination
