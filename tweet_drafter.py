@@ -54,6 +54,7 @@ AGGREGATOR_HANDLES: frozenset[str] = frozenset(h.lower() for h in {
     "theMadridZone", "MadridXtra", "ManagingBarca", "atletiuniverse",
     "PSGINT_", "iMiaSanMia", "AlNassrZone", "TotalCristiano", "mufcMPB",
     "ActuFoot_", "vibesfoot", "ActuSPL",
+    "ManUtdMen",  # United-focused beat feed; nearly always relays other reporters
 })
 
 # Branded-graphic posters: real journalists / outlets whose reporting is
@@ -283,7 +284,7 @@ Context sentence rules:
 - If you cannot add a specific second fact, set context to null. Do not pad.
 
 ATTRIBUTION RULES — aggregator passthrough:
-The source tweet may come from an aggregator account that is RELAYING someone else's reporting. Known aggregators include: @TouchlineX, @DeadlineDayLive, @AlbicelesteTalk, @brfootball, @OneFootball, @_BeFootball, @eurofootcom, @theMadridZone, @MadridXtra, @ManagingBarca, @atletiuniverse, @PSGINT_, @iMiaSanMia, @AlNassrZone, @TotalCristiano, @mufcMPB, @ActuFoot_, @vibesfoot, @ActuSPL. When the source IS one of these, work harder to find the real reporter in the tweet body — they almost always credit one. If genuinely no journalist is credited, leave attribution_handle null and the renderer will omit the source line entirely (no aggregator-credit ever appears in a draft).
+The source tweet may come from an aggregator account that is RELAYING someone else's reporting. Known aggregators include: @TouchlineX, @DeadlineDayLive, @AlbicelesteTalk, @brfootball, @OneFootball, @_BeFootball, @eurofootcom, @theMadridZone, @MadridXtra, @ManagingBarca, @atletiuniverse, @PSGINT_, @iMiaSanMia, @AlNassrZone, @TotalCristiano, @mufcMPB, @ActuFoot_, @vibesfoot, @ActuSPL, @ManUtdMen. When the source IS one of these, work harder to find the real reporter in the tweet body — they almost always credit one. If genuinely no journalist is credited, leave attribution_handle null and the renderer will omit the source line entirely (no aggregator-credit ever appears in a draft).
 If the source tweet body credits another journalist or outlet — patterns like "via @X", "per @X", "🚨 @X reports", "(@X)", "[@X]", "source: @X", "according to @X", "@X:", "X reports" — set attribution_handle to that credited handle (without the @). That's the real reporter; the aggregator is just the loudspeaker.
 If no credit is given in the body, leave attribution_handle null.
 
