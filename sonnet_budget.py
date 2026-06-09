@@ -28,7 +28,11 @@ import threading
 
 log = logging.getLogger("football-bot.budget")
 
-DAILY_CAP_USD = float(os.environ.get("SONNET_DAILY_CAP_USD", "10.0"))
+# Default raised to 16 on 2026-06-09 as a one-day bump after the Haiku-
+# removal pushed call volume up. Revert this to "10.0" (or set the env var
+# SONNET_DAILY_CAP_USD=10 on Render and remove this line) once the
+# trusted-source pre-filter has had a day to settle and call volume drops.
+DAILY_CAP_USD = float(os.environ.get("SONNET_DAILY_CAP_USD", "16.0"))
 DB_PATH = os.environ.get("DB_PATH", "/data/football_ops_v2.db")
 
 _PRICE_INPUT = 3.00 / 1_000_000
