@@ -808,6 +808,17 @@ async def process_article(
         log.info(f"SKIP non-operational: {title[:80]}")
         return
 
+    # Source pre-filter: skip the entire pipeline (article fetch + Sonnet
+    # analysis + embed + draft) for articles from sources NOT in the
+    # trusted-for-drafts allowlist. Pre-Haiku-removal we'd happily run the
+    # cheap Haiku analysis on every RSS hit; post-removal the analysis is
+    # Sonnet ($0.012/call) and ran on hundreds of articles/day, blowing
+    # the $10 cap before drafts could fire. Trusted sources still get the
+    # full pipeline; everything else is dropped here.
+    if not _is_trusted_for_drafts(source):
+        log.debug(f"SKIP untrusted source ({source}): {title[:80]}")
+        return
+
     # Extract article body. We deliberately do NOT use the article's
     # og:image — major outlets brand their share previews with watermarks
     # (BBC Sport bug, L'Équipe title cards, Sky bug, etc.) and the preview
@@ -838,13 +849,12 @@ async def process_article(
     tags = result.get("tags", [])
 
     # Fire CentreGoals draft for the news-tweets channel — immediately, no
-    # cap, no clustering. Only fire if the source is in the trusted allowlist
-    # (avoids drafting clickbait from low-tier aggregators).
+    # cap, no clustering. The source-trust gate higher up already ensured
+    # we're in the trusted allowlist; only the urgency check remains here.
     drafts_webhook = WEBHOOKS.get("tweet_drafts", "")
-    if drafts_webhook and urgency >= 2 and _is_trusted_for_drafts(source):
+    if drafts_webhook and urgency >= 2:
         asyncio.create_task(_draft_article_to_webhook(
             client, conn, drafts_webhook, title_en, summary_en, source, url,
-            image_url,
         ))
 
     # Clustering
