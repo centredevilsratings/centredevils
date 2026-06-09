@@ -79,7 +79,7 @@ def posts_branded_graphics(handle: str) -> bool:
 
 # ─── Women's-football filter ─────────────────────────────────────────────────
 # CentreGoals covers men's football only. Pre-filter at the source-text level
-# so we skip the Haiku call entirely on unambiguous women's-football tweets.
+# so we skip the Sonnet call entirely on unambiguous women's-football tweets.
 _WOMENS_FOOTBALL_RE = re.compile(
     r"\b("
     r"women(?:['’]s|s)?|"                       # women, women's, womens
@@ -159,7 +159,7 @@ Stats accounts (@OptaJoe, @OptaJose, @OptaPaolo, @OptaFranz, @OptaJean, @OptaJoa
 - key_fact must be the SINGLE most operationally important phrase. Keep it 1-3 words.
 - Common key_fact values: MUSCLE INJURY, ACL INJURY, DONE DEAL, HERE WE GO, AGREED, SIGNED, LEAVE, SACKED, RETIRING, EXTENDS, REJECTED, RECALLED, EYEING, LINKED.
 
-KEY_FACT SELECTION — READ CAREFULLY (Haiku was picking the wrong word):
+KEY_FACT SELECTION — READ CAREFULLY:
 The key_fact is the word that gets visually HIGHLIGHTED (rendered in a bold math-font) in the final tweet. It must be the WHY of the story — the news payload. Read the line aloud with the key_fact emphasised — if the emphasis lands on noise, you picked wrong.
 
 The key_fact is what answers: "If a reader only saw the bolded word(s) and nothing else, would they know what just happened?"

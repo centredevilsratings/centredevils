@@ -22,6 +22,7 @@ from bs4 import BeautifulSoup
 from langdetect import detect
 
 import imago
+import sonnet_budget
 import tweet_drafter
 import x_stream
 
@@ -668,6 +669,15 @@ Do NOT wrap in markdown. Output raw JSON only."""
 
 
 def process_with_claude(title: str, body: str, source_lang: str) -> Optional[dict]:
+    # Hard daily-spend gate — shared with the drafter so the $10 cap counts
+    # tokens from BOTH this analysis pass AND every Sonnet draft together.
+    ok, spent = sonnet_budget.under_budget()
+    if not ok:
+        log.warning(
+            f"Sonnet daily cap hit (${spent:.2f} of "
+            f"${sonnet_budget.DAILY_CAP_USD:.2f}); skipping article analysis"
+        )
+        return None
     prompt = f"""Title: {title}
 Source language: {source_lang}
 Body: {body[:1200]}
@@ -675,8 +685,13 @@ Body: {body[:1200]}
 Analyse and return JSON."""
     try:
         msg = claude_client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-sonnet-4-6",
             max_tokens=600,
+            # Analysis is short structured output — disable thinking and use
+            # low effort to match the drafter's tuning (Sonnet 4.6 defaults
+            # to "high" effort which is overkill here).
+            thinking={"type": "disabled"},
+            output_config={"effort": "low"},
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -684,6 +699,11 @@ Analyse and return JSON."""
         # Strip markdown fences if present
         raw = re.sub(r"^```json?\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
+        # Charge the budget regardless of whether the JSON parses.
+        try:
+            sonnet_budget.record_usage(msg.usage)
+        except Exception as bg_e:
+            log.warning(f"Sonnet budget record failed: {bg_e}")
         return json.loads(raw)
     except Exception as e:
         log.warning(f"Claude processing failed: {e}")
