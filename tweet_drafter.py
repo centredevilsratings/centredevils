@@ -146,6 +146,7 @@ Does NOT qualify (in-season or personal stat — skip or use a different label):
 - "Most goals THIS SEASON in the PL" ❌ (single-season superlative without 'ever' or 'in history' = not historic)
 - "Liverpool unbeaten in 8 home games" ❌ (current run, not all-time)
 - "10th hat-trick of his career" ❌ (career milestone, not a record unless explicitly framed as one)
+- "Kane (9) surpasses Ronaldo (8) in World Cup goals" ❌ (HEAD-TO-HEAD comparison between two specific players, NOT an all-time record. The actual all-time WC top scorer is Klose at 16. Do NOT label this RECORD. Do NOT use HIGHEST / MOST / IN HISTORY. Correct treatment: label=null or NEW with line1_template like "Harry Kane SURPASSES Cristiano Ronaldo for World Cup goals (9 vs 8)" — key_fact "SURPASSES" or "9 GOALS".)
 
 If you see a single-season superlative without an 'ever'/'in history'/'since 19XX' anchor, do NOT use RECORD. Either skip or use null label with hedged framing.
 
@@ -235,6 +236,21 @@ This is the single most common hallucination mode. Players and managers change c
 - The ONLY safe defaults: bare name (e.g. "Kevin De Bruyne"), or the descriptor the source itself uses.
 - If the source attaches a club to the person (e.g. "PSG's João Neves extends"), you may carry that pairing into the draft. Otherwise: bare name only.
 - This applies to line1_template AND context. The context sentence is the most common offender — do NOT pad with club/role color the source did not give you.
+
+ANTI-ESCALATION RULE — READ THIS, IT'S WHY HAIKU WAS REPLACED:
+A head-to-head comparison is NOT a historic record. A career milestone is NOT a record. Surpassing one specific player is NOT "highest ever".
+- If the source says "X surpasses Y in stat Z", that is a TWO-PLAYER comparison. Do NOT inflate to "highest Z ever", "all-time leader", "in history" — UNLESS the source itself explicitly contains "ever", "in history", "all-time", "of all time", or "since [year ≥ 30 years ago]".
+- Specific cooked-example: source = "Harry Kane (9) surpasses Cristiano Ronaldo (8) in World Cup goals". CORRECT draft = "Harry Kane SURPASSES Cristiano Ronaldo for most World Cup goals among the two (9 vs 8)" with label null or NEW. WRONG draft (what you must NEVER produce) = "Harry Kane becomes HIGHEST scorer in World Cup history (9 goals)" — the actual all-time WC top scorer is Miroslav Klose with 16, you fabricated the historic framing.
+- Pattern to refuse: any time you find yourself reaching for "HIGHEST", "MOST", "FIRST", "ONLY", "LONGEST", "BEST EVER", "RECORD", "ALL-TIME", "IN HISTORY", "EVER" — check the source text for that exact anchor word. If it isn't there verbatim, you are escalating. Downgrade the draft.
+- Same rule applies to other inflations: "interest in player" ≠ "agreed deal", "open talks" ≠ "DONE DEAL", "considering" ≠ "decided".
+
+AMBIGUOUS-NAME RULE — READ THIS:
+Many football names are shared by multiple famous players, past and present. Never auto-disambiguate beyond what the source literally writes.
+- "Ronaldo" — could be Cristiano Ronaldo, Ronaldo Nazário (Brazilian R9), Ronaldo de Lima, Ronaldinho (sometimes called Ronaldo). DO NOT assume Cristiano. If the source has a Brazilian flag, Brazil context, "R9", or talks about him as a pundit / praising another player, it's R9. If the source has a Portuguese flag, Al-Nassr context, Manchester / Madrid, it's Cristiano. When in doubt, write the bare "Ronaldo" the source used. NEVER expand to "Cristiano Ronaldo" unless that exact phrase is in the source.
+- "Neymar" — usually Neymar Jr but also Neymar Sr exists; if the source disambiguates, follow it.
+- Shared surnames like "Silva", "Santos", "Fernandes", "Rodrigues", "Williams" — use the source's exact full name. Do not collapse "Bernardo Silva" to "Silva" or assume "Silva" means Bernardo.
+- For quote drafts especially: the speaker name in quote_speaker MUST be EXACTLY the name the source uses. If the source says "Ronaldo", quote_speaker is "Ronaldo" — not "Cristiano Ronaldo". The reader sees the speaker's image and context elsewhere; don't put a different person in their mouth.
+- Common-sense sanity check: would this person say this? Cristiano Ronaldo calling Messi "the GREATEST of all time" is wildly out of character — Ronaldo Nazário saying it is on-brand. If the quote is out of character for whoever you're tempted to name, that's a strong signal you've identified the wrong person.
 
 "HERE WE GO" RULE — STRICTEST, READ TWICE:
 "HERE WE GO" is the trademarked catchphrase of Fabrizio Romano (@FabrizioRomano). You may ONLY use it as the key_fact if BOTH of these conditions hold:
