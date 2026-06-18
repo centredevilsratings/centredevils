@@ -328,7 +328,27 @@ Context sentence rules:
 ATTRIBUTION RULES — aggregator passthrough:
 The source tweet may come from an aggregator account that is RELAYING someone else's reporting. Known aggregators include: @TouchlineX, @DeadlineDayLive, @AlbicelesteTalk, @brfootball, @OneFootball, @_BeFootball, @eurofootcom, @theMadridZone, @MadridXtra, @ManagingBarca, @atletiuniverse, @PSGINT_, @iMiaSanMia, @AlNassrZone, @TotalCristiano, @mufcMPB, @ActuFoot_, @vibesfoot, @ActuSPL, @ManUtdMen. When the source IS one of these, work harder to find the real reporter in the tweet body — they almost always credit one. If genuinely no journalist is credited, leave attribution_handle null and the renderer will omit the source line entirely (no aggregator-credit ever appears in a draft).
 If the source tweet body credits another journalist or outlet — patterns like "via @X", "per @X", "🚨 @X reports", "(@X)", "[@X]", "source: @X", "according to @X", "@X:", "X reports" — set attribution_handle to that credited handle (without the @). That's the real reporter; the aggregator is just the loudspeaker.
-If no credit is given in the body, leave attribution_handle null.
+
+@DeadlineDayLive specifically: this account ALWAYS relays another reporter — never breaks its own news. Work especially hard to find the source. Their credit patterns are non-standard and include all of these:
+- A bare surname in parentheses at the end: "(Romano)", "(Ornstein)", "(Plettenberg)", "(Schira)"
+- A name + dash at the start or end: "— Fabrizio Romano", "- David Ornstein", "via Sky Sports"
+- A name without the @ symbol embedded mid-sentence: "Romano reports...", "Sky Sports News understand..."
+- An emoji-flag + name: "🚨 Romano:", "🇮🇹 Di Marzio:"
+- Outlet name only (no journalist): "Source: Sky Sports", "(Sky)", "L'Équipe report", "BILD report"
+Map common surname-only credits to their @ handles when you recognise them:
+  Romano / Fabrizio Romano → "FabrizioRomano"
+  Ornstein / David Ornstein → "David_Ornstein"
+  Di Marzio → "DiMarzio"
+  Plettenberg → "Plettigoal"
+  Schira → "NicoSchira"
+  Sky Sports / Sky → "SkySportsNews"
+  L'Équipe → "lequipe"
+  RMC / RMC Sport → "RMCsport"
+  Marca → "marca"
+  BILD → "BILD"
+For an outlet-only credit without a known @-handle mapping, set attribution_handle to a plausible handle (e.g. "Source: The Athletic" → "TheAthleticFC") — when uncertain about the handle, prefer to leave it null over guessing wrong.
+
+If no credit is given in the body AND the source is an aggregator (DeadlineDayLive included), leave attribution_handle null — the renderer drops the source line entirely. Never let "@DeadlineDayLive" or any other aggregator handle appear as the credited source in the final draft.
 
 FEW-SHOT EXAMPLES (study these — these are the EXACT voice to match):
 
@@ -418,6 +438,21 @@ Output:
 Source tweet by @theMadridZone: "🚨 Real Madrid have submitted a €60m bid for Piero Hincapié. Leverkusen want closer to €75m. Per @MatteMoretto."
 Output:
 {"skip": false, "label": "JUST IN", "line1_template": "Real Madrid submit {{KEY}} for Piero Hincapié, Leverkusen holding out.", "key_fact": "€60M BID", "emoji_flag": "👀🇪🇨", "context": "Leverkusen want closer to €75m for the Ecuadorian defender.", "attribution_handle": "MatteMoretto"}
+
+Source tweet by @DeadlineDayLive: "BREAKING: Manchester City have reached full agreement with Sporting CP for Geovany Quenda. €50m + add-ons, 5-year deal. (Romano)"
+Output:
+{"skip": false, "label": "BREAKING", "is_quote": false, "line1_template": "Manchester City reach full agreement with Sporting for Geovany Quenda, {{KEY}}!", "key_fact": "DONE DEAL", "emoji_flag": "✅🇵🇹", "context": "€50m + add-ons. Five-year contract.", "attribution_handle": "FabrizioRomano", "quote_speaker": "", "quote_text": "", "story_id": "geovany-quenda-manchester-city-transfer"}
+[NOTE: @DeadlineDayLive is an aggregator — the (Romano) suffix means Fabrizio Romano. Mapped to his @FabrizioRomano handle. The aggregator handle never appears in the draft.]
+
+Source tweet by @DeadlineDayLive: "🚨 Newcastle have made an opening bid of €70m for Sesko. RB Leipzig holding out for €90m. — David Ornstein"
+Output:
+{"skip": false, "label": "JUST IN", "is_quote": false, "line1_template": "Newcastle submit {{KEY}} for Benjamin Sesko, Leipzig holding out for €90m.", "key_fact": "€70M BID", "emoji_flag": "👀🇸🇮", "context": null, "attribution_handle": "David_Ornstein", "quote_speaker": "", "quote_text": "", "story_id": "benjamin-sesko-newcastle-transfer"}
+[NOTE: "— David Ornstein" footer pattern from @DeadlineDayLive → @David_Ornstein.]
+
+Source tweet by @DeadlineDayLive: "BREAKING: Florian Wirtz to Real Madrid is happening."
+Output:
+{"skip": false, "label": "BREAKING", "is_quote": false, "line1_template": "Florian Wirtz to Real Madrid, {{KEY}}.", "key_fact": "HAPPENING", "emoji_flag": "👀🇩🇪", "context": null, "attribution_handle": null, "quote_speaker": "", "quote_text": "", "story_id": "florian-wirtz-real-madrid-transfer"}
+[NOTE: @DeadlineDayLive with NO journalist credited in the body — attribution_handle stays null and the renderer drops the source line entirely. The aggregator handle is never used.]
 
 Source: "Just listened to the new pod with the boys, hilarious stuff on Mourinho's return. Link below 👇"
 Output:
