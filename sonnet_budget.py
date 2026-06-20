@@ -33,6 +33,14 @@ log = logging.getLogger("football-bot.budget")
 # SONNET_DAILY_CAP_USD=10 on Render and remove this line) once the
 # trusted-source pre-filter has had a day to settle and call volume drops.
 DAILY_CAP_USD = float(os.environ.get("SONNET_DAILY_CAP_USD", "16.0"))
+
+# Separate sub-cap for the interactive #bot-chat assistant. Interactive
+# calls also charge the main DAILY_CAP_USD, so a chatty day can't blow the
+# total budget — but this sub-cap keeps chat alone from starving the
+# auto-drafter even within the main cap.
+INTERACTIVE_DAILY_CAP_USD = float(
+    os.environ.get("INTERACTIVE_DAILY_CAP_USD", "5.0")
+)
 DB_PATH = os.environ.get("DB_PATH", "/data/football_ops_v2.db")
 
 _PRICE_INPUT = 3.00 / 1_000_000
@@ -56,6 +64,14 @@ def _conn() -> sqlite3.Connection:
         " output_tokens INTEGER NOT NULL DEFAULT 0,"
         " cache_creation_tokens INTEGER NOT NULL DEFAULT 0,"
         " cache_read_tokens INTEGER NOT NULL DEFAULT 0,"
+        " usd_spent REAL NOT NULL DEFAULT 0.0,"
+        " calls INTEGER NOT NULL DEFAULT 0)"
+    )
+    # Interactive sub-budget — separate counter so a chatty operator can't
+    # starve the auto-drafter even when total spend is under the main cap.
+    c.execute(
+        "CREATE TABLE IF NOT EXISTS sonnet_spend_interactive("
+        " day TEXT PRIMARY KEY,"
         " usd_spent REAL NOT NULL DEFAULT 0.0,"
         " calls INTEGER NOT NULL DEFAULT 0)"
     )
@@ -88,12 +104,16 @@ def under_budget() -> tuple[bool, float]:
     return (spent < DAILY_CAP_USD, spent)
 
 
-def record_usage(usage) -> float:
+def record_usage(usage, *, interactive: bool = False) -> float:
     """Record one Claude call's usage on today's row. Returns new total USD.
 
     `usage` is the response.usage object from the anthropic SDK — has
     `input_tokens`, `output_tokens`, `cache_creation_input_tokens`,
     `cache_read_input_tokens`. Missing/None fields treated as 0.
+
+    When `interactive=True`, the call ALSO charges the interactive sub-cap
+    table (in addition to the main one) — interactive calls hit both, so
+    they can't blow either budget.
     """
     inp = int(getattr(usage, "input_tokens", 0) or 0)
     out = int(getattr(usage, "output_tokens", 0) or 0)
@@ -117,7 +137,41 @@ def record_usage(usage) -> float:
                 " calls=calls+1",
                 (day, inp, out, cwrite, cread, delta),
             )
+            if interactive:
+                c.execute(
+                    "INSERT INTO sonnet_spend_interactive(day, usd_spent, calls)"
+                    " VALUES(?,?,1) "
+                    "ON CONFLICT(day) DO UPDATE SET "
+                    " usd_spent=usd_spent+excluded.usd_spent, calls=calls+1",
+                    (day, delta),
+                )
             total = c.execute(
                 "SELECT usd_spent FROM sonnet_spend WHERE day=?", (day,)
             ).fetchone()[0]
     return float(total)
+
+
+def interactive_daily_spend_usd() -> float:
+    """Today's UTC-day spend on interactive #bot-chat calls."""
+    with _LOCK:
+        with _conn() as c:
+            row = c.execute(
+                "SELECT usd_spent FROM sonnet_spend_interactive WHERE day=?",
+                (_today(),),
+            ).fetchone()
+    return float(row[0]) if row else 0.0
+
+
+def interactive_under_budget() -> tuple[bool, float, float]:
+    """Returns (ok_to_call, interactive_spent_usd, main_spent_usd).
+
+    Interactive calls must be under BOTH the interactive sub-cap AND the
+    main cap. ok_to_call is True only when both hold.
+    """
+    interactive_spent = interactive_daily_spend_usd()
+    main_spent = daily_spend_usd()
+    ok = (
+        interactive_spent < INTERACTIVE_DAILY_CAP_USD
+        and main_spent < DAILY_CAP_USD
+    )
+    return (ok, interactive_spent, main_spent)

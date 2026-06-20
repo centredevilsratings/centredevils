@@ -22,6 +22,7 @@ from bs4 import BeautifulSoup
 from langdetect import detect
 
 import imago
+import interactive_bot
 import sonnet_budget
 import tweet_drafter
 import x_stream
@@ -987,6 +988,10 @@ async def main():
 
     async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
         tasks = [asyncio.create_task(poll_loop(client, conn))]
+
+        # Interactive #bot-chat assistant — runs alongside RSS polling and
+        # the X stream; exits silently if its env vars aren't set.
+        tasks.append(asyncio.create_task(interactive_bot.run(claude_client)))
 
         if X_BEARER_TOKEN and drafts_webhook:
             tweet_queue: asyncio.Queue = asyncio.Queue(maxsize=500)
