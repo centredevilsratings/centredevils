@@ -40,6 +40,7 @@ import asyncio
 import datetime as _dt
 import logging
 import os
+import re
 import time
 from collections import deque
 from typing import Optional
@@ -129,49 +130,42 @@ GENERAL TONE:
 """
 
 
-def _is_relevant_channel(message: discord.Message) -> bool:
-    """Only respond in the configured channel; ignore bots and self."""
-    if message.author.bot:
-        return False
-    if CHANNEL_ID and message.channel.id != CHANNEL_ID:
-        return False
-    return True
-
-
 class _Memory:
-    """Per-user rolling conversation history, with idle-based expiry."""
+    """Rolling conversation history keyed by an opaque conversation key
+    (we use "<channel_id>:<user_id>" so each user has a separate thread of
+    context per channel). Idle-based expiry."""
 
     def __init__(self) -> None:
-        self._store: dict[int, tuple[deque, float]] = {}
+        self._store: dict[str, tuple[deque, float]] = {}
 
-    def get(self, user_id: int) -> list:
-        entry = self._store.get(user_id)
+    def get(self, key: str) -> list:
+        entry = self._store.get(key)
         if not entry:
             return []
         turns, last_ts = entry
         if time.time() - last_ts > _MEM_IDLE_TIMEOUT:
-            self._store.pop(user_id, None)
+            self._store.pop(key, None)
             return []
         return list(turns)
 
-    def append(self, user_id: int, role: str, content: str) -> None:
-        entry = self._store.get(user_id)
+    def append(self, key: str, role: str, content: str) -> None:
+        entry = self._store.get(key)
         if not entry:
             entry = (deque(maxlen=_MEM_TURNS), time.time())
-            self._store[user_id] = entry
+            self._store[key] = entry
         turns, _ = entry
         turns.append({"role": role, "content": content})
-        self._store[user_id] = (turns, time.time())
+        self._store[key] = (turns, time.time())
 
-    def reset(self, user_id: int) -> None:
-        self._store.pop(user_id, None)
+    def reset(self, key: str) -> None:
+        self._store.pop(key, None)
 
 
 _memory = _Memory()
 
 
-def _build_messages(user_id: int, user_message: str) -> list:
-    history = _memory.get(user_id)
+def _build_messages(key: str, user_message: str) -> list:
+    history = _memory.get(key)
     history.append({"role": "user", "content": user_message})
     return history
 
@@ -211,10 +205,10 @@ def _extract_assistant_text(response) -> str:
 
 
 async def _generate_reply(
-    claude: anthropic.Anthropic, user_id: int, user_message: str,
+    claude: anthropic.Anthropic, conv_key: str, user_message: str,
 ) -> str:
     """Single Claude call with web_search enabled. Returns the reply text."""
-    messages = _build_messages(user_id, user_message)
+    messages = _build_messages(conv_key, user_message)
     # Inject today's date so "latest" / "current" / "recent" have a temporal
     # anchor — without it the model can mistake stale training data for the
     # present. No prompt caching here, so a per-day-changing system prompt is fine.
@@ -251,24 +245,36 @@ async def _generate_reply(
         reply = "I couldn't generate a reply for that — try rephrasing?"
 
     # Record both sides of the turn so memory is consistent for next call.
-    _memory.append(user_id, "user", user_message)
-    _memory.append(user_id, "assistant", reply)
+    _memory.append(conv_key, "user", user_message)
+    _memory.append(conv_key, "assistant", reply)
     return reply
 
 
-async def _send_chunks(channel: discord.TextChannel, text: str) -> None:
-    """Discord caps messages at 2000 chars — split on natural boundaries."""
+async def _send_chunks(channel, text: str, reply_to=None) -> None:
+    """Discord caps messages at 2000 chars — split on natural boundaries.
+
+    The first chunk is sent as a reply to `reply_to` (the user's message)
+    when given, so the answer is visibly attached to the question; follow-up
+    chunks are plain sends.
+    """
     LIMIT = 1900
+    first = True
     while text:
         if len(text) <= LIMIT:
-            await channel.send(text)
-            return
-        # Split on the last newline before the limit, else hard-cut.
-        cut = text.rfind("\n", 0, LIMIT)
-        if cut < LIMIT // 2:
-            cut = LIMIT
-        await channel.send(text[:cut])
-        text = text[cut:].lstrip()
+            chunk, text = text, ""
+        else:
+            cut = text.rfind("\n", 0, LIMIT)
+            if cut < LIMIT // 2:
+                cut = LIMIT
+            chunk, text = text[:cut], text[cut:].lstrip()
+        if first and reply_to is not None:
+            try:
+                await reply_to.reply(chunk, mention_author=False)
+            except Exception:
+                await channel.send(chunk)
+        else:
+            await channel.send(chunk)
+        first = False
 
 
 def _make_client(claude: anthropic.Anthropic) -> discord.Client:
@@ -280,31 +286,66 @@ def _make_client(claude: anthropic.Anthropic) -> discord.Client:
     async def on_ready() -> None:
         log.info(
             f"Interactive bot connected as {client.user} "
-            f"(listening in channel {CHANNEL_ID})"
+            f"(full chat in channel {CHANNEL_ID}; @mention in any channel)"
         )
 
     @client.event
     async def on_message(message: discord.Message) -> None:
-        # Diagnostic: log every message we see so we can tell whether the
-        # bot is receiving traffic at all when nothing seems to happen.
-        log.info(
-            f"on_message: channel={message.channel.id} "
-            f"author={message.author.id} bot={message.author.bot} "
-            f"content_len={len(message.content or '')} "
-            f"relevant={_is_relevant_channel(message)}"
-        )
-        if not _is_relevant_channel(message):
+        # Never react to bots/webhooks/self (the auto-drafter posts via
+        # webhook, so its drafts have author.bot=True and are ignored — the
+        # bot only acts when a human @mentions it or talks in #bot-chat).
+        if message.author.bot:
             return
 
-        content = (message.content or "").strip()
-        if not content:
+        in_dedicated = bool(CHANNEL_ID) and message.channel.id == CHANNEL_ID
+        mentioned = client.user in message.mentions
+
+        # Respond to EVERYTHING in #bot-chat, and to ANY message that
+        # @mentions the bot in any other channel / thread.
+        if not (in_dedicated or mentioned):
             return
 
-        # !reset clears that user's conversation memory.
+        # Strip the bot's own @mention token out of the text.
+        content = re.sub(rf"<@!?{client.user.id}>", "", message.content or "").strip()
+
+        # !reset clears this conversation's memory.
+        conv_key = f"{message.channel.id}:{message.author.id}"
         if content.lower() in ("!reset", "/reset"):
-            _memory.reset(message.author.id)
+            _memory.reset(conv_key)
             await message.channel.send("Conversation memory cleared.")
             return
+
+        # If the mention is a reply to another message (e.g. replying to a
+        # draft with "@bot make this shorter" or "@bot fact-check this"),
+        # pull in the referenced message so the bot has the context.
+        ref_text = ""
+        if message.reference and message.reference.message_id:
+            try:
+                ref = message.reference.resolved
+                if ref is None or isinstance(ref, discord.DeletedReferencedMessage):
+                    ref = await message.channel.fetch_message(
+                        message.reference.message_id
+                    )
+                if ref and ref.content:
+                    ref_text = ref.content.strip()
+            except Exception as e:
+                log.debug(f"Could not resolve referenced message: {e}")
+
+        # A bare mention with no text and no reply → friendly nudge.
+        if not content and not ref_text:
+            await message.channel.send(
+                "Hey — reply to a draft and @ me to rewrite or fact-check it, "
+                "or just ask me something (e.g. \"fetch the latest on Mbappé\")."
+            )
+            return
+
+        if ref_text:
+            user_message = (
+                f"The user is replying to this message:\n\"\"\"\n{ref_text}\n\"\"\"\n\n"
+                f"Their instruction / question:\n{content or '(no text — infer intent from the replied-to message)'}"
+            )
+        else:
+            user_message = content
 
         # Budget gate.
         ok, ispent, mspent = sonnet_budget.interactive_under_budget()
@@ -318,8 +359,9 @@ def _make_client(claude: anthropic.Anthropic) -> discord.Client:
             return
 
         async with message.channel.typing():
-            reply = await _generate_reply(claude, message.author.id, content)
-        await _send_chunks(message.channel, reply)
+            reply = await _generate_reply(claude, conv_key, user_message)
+        # Reply in-thread to the user's message so it's clear what it answers.
+        await _send_chunks(message.channel, reply, reply_to=message)
 
     return client
 
