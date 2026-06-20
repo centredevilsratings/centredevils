@@ -241,6 +241,14 @@ def _make_client(claude: anthropic.Anthropic) -> discord.Client:
 
     @client.event
     async def on_message(message: discord.Message) -> None:
+        # Diagnostic: log every message we see so we can tell whether the
+        # bot is receiving traffic at all when nothing seems to happen.
+        log.info(
+            f"on_message: channel={message.channel.id} "
+            f"author={message.author.id} bot={message.author.bot} "
+            f"content_len={len(message.content or '')} "
+            f"relevant={_is_relevant_channel(message)}"
+        )
         if not _is_relevant_channel(message):
             return
 
