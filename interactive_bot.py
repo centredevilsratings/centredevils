@@ -37,6 +37,7 @@ Env vars:
 from __future__ import annotations
 
 import asyncio
+import datetime as _dt
 import logging
 import os
 import time
@@ -59,23 +60,32 @@ _MEM_TURNS = 10
 _MEM_IDLE_TIMEOUT = 30 * 60   # 30 minutes
 
 
-SYSTEM_PROMPT = """You are the CentreGoals assistant — a helpful chat companion for the operator running the CentreGoals football tweet bot. You live in a dedicated #bot-chat Discord channel and have three main jobs plus free chat.
+SYSTEM_PROMPT = """You are the CentreGoals assistant — a helpful chat companion for the operator running the CentreGoals football tweet bot. You live in a dedicated #bot-chat Discord channel and have four main jobs plus free chat.
 
-THREE MODES (you auto-select based on the operator's message):
+FOUR MODES (you auto-select based on the operator's message):
 
-1. REWRITE A DRAFT
-The operator will paste one of the bot's auto-drafts (they look like:
+1. FETCH LATEST NEWS / RESEARCH
+The operator asks "fetch the latest news on X", "what's the latest with X", "any news about X", "what's happening with X". This is a RESEARCH request, NOT a profile request.
+- You MUST use the web_search tool. Run MULTIPLE searches if needed (e.g. "<name> news", "<name> transfer", "<name> latest"). Search X/Twitter-style sources and football news outlets.
+- Return the ACTUAL RECENT NEWS — dated headlines from the last days/weeks — NOT a static bio or career-stats dump. The operator already knows who the player is; they want to know what JUST happened.
+- Format: 3-6 bullet points, each = the news item + how recent it is + the source. Lead with the most recent / most significant. Example bullet: "• (2 days ago, Fabrizio Romano) West Ham rejected a €40m bid from Napoli for him."
+- If there genuinely is no recent news, say so plainly ("Nothing new in the last couple of weeks — last item was…") rather than padding with biographical filler.
+- ALWAYS cite sources — the code appends source URLs automatically from your searches, so actually perform the searches.
+- Do NOT answer a "latest news" request from memory. Your training data is months stale; clubs, fees, and situations change weekly.
+
+2. REWRITE A DRAFT
+The operator pastes one of the bot's auto-drafts (they look like:
    🚨🚨| BREAKING: <line1>
    <context>
    [@source]
 )
-and give you an instruction ("make it shorter", "drop the context line", "change the key fact to AGREED instead of HERE WE GO", "remove the emoji"). Return the revised draft as a single code block, following the CentreGoals voice rules below. Don't add commentary unless the operator asks "why" — just return the rewritten draft.
+and gives you an instruction ("make it shorter", "drop the context line", "change the key fact to AGREED instead of HERE WE GO", "remove the emoji"). Return the revised draft as a single code block, following the CentreGoals voice rules below. Don't add commentary unless the operator asks "why" — just return the rewritten draft.
 
-2. DRAFT FROM A SOURCE
-The operator will paste a URL or a news snippet ("draft this: <text or URL>"). Produce a CentreGoals-style draft following the voice rules below. If a URL is given, use the web_search tool to fetch and read the article first.
+3. DRAFT FROM A SOURCE
+The operator pastes a URL or a news snippet ("draft this: <text or URL>"). Produce a CentreGoals-style draft following the voice rules below. If a URL is given, use the web_search tool to fetch and read the article first.
 
-3. FACT-CHECK
-The operator will ask "is this true?" / "fact-check this" about a claim or one of the auto-drafts. ALWAYS use the web_search tool — never answer from training data, which is stale. Reply with:
+4. FACT-CHECK
+The operator asks "is this true?" / "fact-check this" about a claim or one of the auto-drafts. ALWAYS use the web_search tool — never answer from training data, which is stale. Reply with:
 - VERDICT: confirmed / disputed / unverified / false
 - Concise explanation (1-3 sentences)
 - The sources you found (URLs)
@@ -103,11 +113,14 @@ Rules:
 - "HERE WE GO" only when the original reporter is Fabrizio Romano AND the source literally contains the phrase.
 - Quote drafts: speaker name BEFORE the colon, verbatim quote AFTER in double quotes. Multi-paragraph quotes use opening " on each paragraph and closing " only on the LAST.
 
-WHEN TO USE web_search:
-- ALWAYS for fact-checks (mode 3) — your training data is stale.
-- When the operator gives you a URL to draft from.
-- When the operator asks about current player clubs, roles, ages, recent events, or anything where your training data could be wrong.
-- Don't search for everyday facts you're confident about (rules of football, historical greats, etc.).
+WHEN TO USE web_search — DEFAULT TO SEARCHING:
+- ALWAYS for "latest news / what's happening / any news on X" (mode 1) — run multiple searches.
+- ALWAYS for fact-checks (mode 4) — your training data is stale.
+- When the operator gives you a URL to draft from (mode 3).
+- When the operator asks about ANY current state: a player's current club, role, age, recent matches, transfer situation, injury status, contract, market value, or anything time-sensitive.
+- The bar for searching is LOW. If the answer could have changed since your training cutoff, search. Football moves weekly — assume your memory is out of date for anything from the last several months.
+- Only skip searching for timeless facts (rules of the game, historical results, "who won the 2014 World Cup").
+- NEVER present stale training-data facts as if they were current. If you're answering about a player's present situation without having searched, you are probably wrong.
 
 GENERAL TONE:
 - Direct, concise, football-literate. Match the operator's vibe (they're terse — match that).
@@ -166,15 +179,35 @@ def _build_messages(user_id: int, user_message: str) -> list:
 def _extract_assistant_text(response) -> str:
     """Pull out the assistant's final text reply from a Claude response.
 
-    With web_search enabled the response may contain server_tool_use and
-    web_search_tool_result blocks interleaved with text. We want only the
-    plain-text reply blocks, concatenated in order.
+    With web_search enabled the response contains server_tool_use and
+    web_search_tool_result blocks interleaved with text, and the text blocks
+    carry `citations` pointing at the sources used. We concatenate the text
+    and append a deduped Sources footer built from those citations, so the
+    operator can see (a) that a search actually happened and (b) where the
+    facts came from.
     """
     parts = []
+    sources: dict[str, str] = {}        # url -> title (deduped, order-preserving)
+    searched = False
     for block in response.content:
-        if getattr(block, "type", None) == "text":
+        btype = getattr(block, "type", None)
+        if btype == "text":
             parts.append(block.text)
-    return "\n".join(parts).strip()
+            for cit in (getattr(block, "citations", None) or []):
+                url = getattr(cit, "url", None)
+                if url and url not in sources:
+                    sources[url] = getattr(cit, "title", None) or url
+        elif btype in ("server_tool_use", "web_search_tool_result"):
+            searched = True
+
+    text = "\n".join(parts).strip()
+    if sources:
+        lines = "\n".join(f"• <{u}>" for u in list(sources)[:6])
+        text += f"\n\n**Sources:**\n{lines}"
+    elif searched:
+        # Searched but the model didn't attach citations to its text.
+        text += "\n\n_(searched the web — no specific sources cited)_"
+    return text
 
 
 async def _generate_reply(
@@ -182,6 +215,17 @@ async def _generate_reply(
 ) -> str:
     """Single Claude call with web_search enabled. Returns the reply text."""
     messages = _build_messages(user_id, user_message)
+    # Inject today's date so "latest" / "current" / "recent" have a temporal
+    # anchor — without it the model can mistake stale training data for the
+    # present. No prompt caching here, so a per-day-changing system prompt is fine.
+    today = _dt.datetime.utcnow().strftime("%A, %d %B %Y")
+    system = (
+        SYSTEM_PROMPT
+        + f"\n\nTODAY'S DATE: {today} (UTC). When the operator says 'latest', "
+        "'current', 'recent', or 'now', they mean relative to this date. Your "
+        "training data predates this — search the web for anything that may "
+        "have changed since your knowledge cutoff."
+    )
     try:
         msg = await asyncio.to_thread(
             claude.messages.create,
@@ -189,7 +233,7 @@ async def _generate_reply(
             max_tokens=2000,
             thinking={"type": "disabled"},
             output_config={"effort": "low"},
-            system=SYSTEM_PROMPT,
+            system=system,
             tools=[{"type": "web_search_20260209", "name": "web_search"}],
             messages=messages,
         )
