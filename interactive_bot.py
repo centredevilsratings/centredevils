@@ -47,6 +47,7 @@ from typing import Optional
 
 import anthropic
 import discord
+import httpx
 
 import sonnet_budget
 
@@ -54,6 +55,7 @@ log = logging.getLogger("football-bot.interactive")
 
 BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "")
 CHANNEL_ID = int(os.environ.get("BOT_CHAT_CHANNEL_ID", "0") or 0)
+X_BEARER = os.environ.get("X_BEARER_TOKEN", "")
 
 # Per-user state: { user_id: ([turns...], last_activity_ts) }
 # Each turn is {"role": "user"|"assistant", "content": "..."}
@@ -123,11 +125,82 @@ WHEN TO USE web_search — DEFAULT TO SEARCHING:
 - Only skip searching for timeless facts (rules of the game, historical results, "who won the 2014 World Cup").
 - NEVER present stale training-data facts as if they were current. If you're answering about a player's present situation without having searched, you are probably wrong.
 
+X / TWITTER URLs — ALREADY FETCHED FOR YOU:
+The harness pre-fetches every X/Twitter URL in the operator's message via the X API and prepends the full tweet content (author + text + media descriptions) at the top of the user turn under a heading "X/Twitter tweets referenced". When you see that block:
+- Treat it as the authoritative content of the tweet. Do NOT try to web_search the X URL itself — X.com blocks server-side fetchers (login wall + JS gate) and your search will fail.
+- For fact-checks: use the pre-fetched tweet text as the claim, then web_search to verify the claim against current reality from non-X sources (news outlets, official accounts).
+- For "draft this": draft from the pre-fetched tweet text directly, following the CentreGoals voice rules.
+- If the heading is present but the tweet content is missing (rare — deleted tweet, API rate-limit), say so and ask the operator to paste the tweet text.
+
 GENERAL TONE:
 - Direct, concise, football-literate. Match the operator's vibe (they're terse — match that).
 - Don't over-explain unless asked. If you rewrite a draft, just return the rewrite.
 - If the operator's instruction is ambiguous, ask one quick clarifying question rather than guessing.
 """
+
+
+# ─── X / Twitter tweet fetcher ───────────────────────────────────────────────
+# Claude's hosted web_search tool can't reach X.com (JS gate + login wall) —
+# operator hit this trying to fact-check an X URL. We have an X bearer token
+# already (used by x_stream.py for the filtered stream); reuse it via the
+# Tweet Lookup endpoint and prepend the actual tweet text as context to the
+# Claude call.
+_X_URL_RE = re.compile(
+    r"https?://(?:x|twitter|nitter)\.com/[A-Za-z0-9_]+/status(?:es)?/(\d+)"
+)
+
+
+async def _fetch_x_tweet(url: str) -> Optional[str]:
+    """Given an X/Twitter status URL, return a human-readable rendering of
+    the tweet via the X API v2 Tweet Lookup. None on any failure (no token,
+    unrecognised URL, rate limit, deleted tweet, etc.)."""
+    if not X_BEARER:
+        log.info("X_BEARER_TOKEN not set; can't fetch X tweet contents")
+        return None
+    m = _X_URL_RE.search(url)
+    if not m:
+        return None
+    tid = m.group(1)
+    api = f"https://api.twitter.com/2/tweets/{tid}"
+    params = {
+        "tweet.fields": "text,created_at,referenced_tweets,attachments",
+        "expansions": "author_id,attachments.media_keys",
+        "user.fields": "username,name",
+        "media.fields": "type,url,alt_text",
+    }
+    headers = {"Authorization": f"Bearer {X_BEARER}"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(api, headers=headers, params=params)
+    except Exception as e:
+        log.warning(f"X API request failed for tweet {tid}: {e}")
+        return None
+    if r.status_code != 200:
+        log.warning(f"X API HTTP {r.status_code} for tweet {tid}: {r.text[:200]}")
+        return None
+    try:
+        data = r.json()
+    except Exception:
+        return None
+    tweet = (data.get("data") or {})
+    if not tweet:
+        return None
+    text = tweet.get("text", "").strip()
+    created = tweet.get("created_at", "")
+    users = ((data.get("includes") or {}).get("users") or [])
+    author = users[0] if users else {}
+    handle = author.get("username", "?")
+    name = author.get("name", "")
+    label = f"@{handle}" + (f" ({name})" if name else "")
+    media = ((data.get("includes") or {}).get("media") or [])
+    media_lines = []
+    for m_ in media:
+        mtype = m_.get("type", "media")
+        alt = m_.get("alt_text") or ""
+        media_lines.append(f"  [{mtype}{(': ' + alt) if alt else ''}]")
+    media_block = ("\n" + "\n".join(media_lines)) if media_lines else ""
+    when = f" (posted {created})" if created else ""
+    return f"Tweet by {label}{when}:\n{text}{media_block}"
 
 
 class _Memory:
@@ -339,6 +412,23 @@ def _make_client(claude: anthropic.Anthropic) -> discord.Client:
             )
             return
 
+        # If the user's message (or what they're replying to) contains any
+        # X/Twitter status URLs, fetch the actual tweet text via the X API
+        # and prepend it as context. Claude's hosted web_search can't reach
+        # X due to the JS gate + login wall — without this, fact-checking
+        # an X URL produces "I can't access this" replies.
+        urls_seen: list[str] = []
+        for src in (content, ref_text):
+            for m_ in _X_URL_RE.finditer(src or ""):
+                url = m_.group(0)
+                if url not in urls_seen:
+                    urls_seen.append(url)
+        tweet_blocks: list[str] = []
+        for url in urls_seen[:4]:                  # cap to keep prompt size sane
+            snippet = await _fetch_x_tweet(url)
+            if snippet:
+                tweet_blocks.append(snippet)
+
         if ref_text:
             user_message = (
                 f"The user is replying to this message:\n\"\"\"\n{ref_text}\n\"\"\"\n\n"
@@ -346,6 +436,16 @@ def _make_client(claude: anthropic.Anthropic) -> discord.Client:
             )
         else:
             user_message = content
+
+        if tweet_blocks:
+            user_message = (
+                "X/Twitter tweets referenced (full content fetched via X API "
+                "— use this directly, do NOT try to web-search the X URL "
+                "since X blocks server-side fetchers):\n\n"
+                + "\n\n---\n\n".join(tweet_blocks)
+                + "\n\n"
+                + user_message
+            )
 
         # Budget gate.
         ok, ispent, mspent = sonnet_budget.interactive_under_budget()
