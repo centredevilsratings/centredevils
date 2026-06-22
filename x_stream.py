@@ -39,6 +39,19 @@ JOURNALISTS: list[str] = [
     # ── Spanish press ──
     "Santi_J_FM", "MarioCortegana", "GuillermoRai_", "gerardromero",
 
+    # ── Argentine / South-American press (Messi, Argentina, Conmebol) ──
+    "gastonedul",       # Gastón Edul — TyC Sports, primary Messi/Argentina source
+    "CesarLuisMerlo",   # César Luis Merlo — major Argentine transfer/news
+    "EzeQuintana",      # Ezequiel Quintana — Argentine football reporter
+    "TyCSports",        # Argentine sports network
+    "ESPNArgentina",    # ESPN Argentina
+    "tntsports",        # TNT Sports Brazil (Brazil-side coverage)
+
+    # ── International / World Cup official ──
+    "FIFAWorldCup",     # FIFA World Cup official
+    "FIFAcom",          # FIFA main
+    "Argentina",        # AFA Argentina official
+
     # ── Outlets — Spanish ──
     "marca", "diarioas", "mundodeportivo", "sport", "relevo",
 

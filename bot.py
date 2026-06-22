@@ -522,6 +522,19 @@ _OPS_KEYWORDS = (
     "ownership", "takeover", "owner", "buy", "bought", "sale",
     "captain", "vice-captain",
     "here we go", "done deal", "breaking", "just in", "exclusive",
+    # Match events / on-field news (added 2026-06-21 — auto-drafter was
+    # missing World Cup records, penalty incidents, eliminations, etc.).
+    "hat-trick", "hat trick", "brace",
+    "scores", "scored", "score", "goal", "goals",
+    "penalty", "penalties", "saved penalty", "missed penalty",
+    "red card", "sent off", "expelled", "var", "disallowed",
+    "winner", "equaliser", "equalizer", "comeback",
+    "record", "breaks", "sets", "most", "first ever", "first since",
+    "youngest", "oldest", "milestone", "historic", "in history",
+    "knocked out", "eliminated", "advances", "advance to",
+    "qualifies", "qualified", "qualify",
+    "lifts", "champion", "champions", "crowned", "title",
+    "beat", "beaten", "defeat", "thrash", "stun", "stunned",
 )
 
 
