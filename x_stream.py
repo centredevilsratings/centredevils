@@ -104,8 +104,9 @@ JOURNALISTS: list[str] = [
 ]
 
 
-def _chunk_rules(handles: Iterable[str], max_len: int = 480) -> list[str]:
-    """Build OR-joined `from:` rules, each under the per-rule character limit."""
+def _chunk_rules(handles: Iterable[str], max_len: int = 512) -> list[str]:
+    """Build OR-joined `from:` rules, each under the per-rule character limit
+    (X allows 512 chars per filtered-stream rule)."""
     rules: list[str] = []
     current: list[str] = []
     current_len = 0
@@ -189,12 +190,31 @@ def _sync_rules(client: _Listener, handles: list[str]) -> None:
     existing = client.get_rules()
     if existing and existing.data:
         client.delete_rules([r.id for r in existing.data])
+    chunks = _chunk_rules(handles)
     rules = [tweepy.StreamRule(value=r, tag=f"journalists_{i}")
-             for i, r in enumerate(_chunk_rules(handles))]
-    if rules:
-        client.add_rules(rules)
-        log.info(f"X stream rules synced: {len(rules)} rule(s), "
-                 f"{len(handles)} handles")
+             for i, r in enumerate(chunks)]
+    if not rules:
+        return
+    resp = client.add_rules(rules)
+    created = len(resp.data) if getattr(resp, "data", None) else 0
+    # Surface rejected rules — on the Basic API tier the filtered stream
+    # caps at 5 rules, so extra chunks are rejected and their handles are
+    # SILENTLY dropped from coverage. Logging it makes the cap visible.
+    errors = getattr(resp, "errors", None)
+    if errors:
+        log.error(
+            f"X stream: {len(errors)} rule(s) REJECTED — handles in those "
+            f"rules are NOT being covered. Likely the per-tier rule cap "
+            f"(Basic=5 rules). Errors: {errors}"
+        )
+    if created < len(rules):
+        log.error(
+            f"X stream: only {created}/{len(rules)} rules accepted. "
+            f"{len(rules) - created} chunk(s) dropped — upgrade API tier or "
+            f"trim the handle list to restore full coverage."
+        )
+    log.info(f"X stream rules synced: {created}/{len(rules)} rule(s) accepted, "
+             f"{len(handles)} handles requested")
 
 
 def start_stream(bearer_token: str, loop: asyncio.AbstractEventLoop,

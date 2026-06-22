@@ -162,6 +162,33 @@ SEARCH_QUERIES = [
     "Inter Miami news",
     "Al-Nassr news",
     "Al Hilal news",
+    # ── World Cup 2026 — national teams (breadth the X stream can't hold).
+    # Trusted-outlet + operational + newsworthiness filters downstream keep
+    # these high-signal; this is the main coverage path for the tournament.
+    "Argentina World Cup",
+    "Brazil World Cup",
+    "France World Cup",
+    "England World Cup",
+    "Spain World Cup",
+    "Germany World Cup",
+    "Portugal World Cup",
+    "Netherlands World Cup",
+    "Belgium World Cup",
+    "Croatia World Cup",
+    "Uruguay World Cup",
+    "Colombia World Cup",
+    "Morocco World Cup",
+    "USA World Cup",
+    "Mexico World Cup",
+    "Japan World Cup",
+    "Senegal World Cup",
+    "Switzerland World Cup",
+    "Denmark World Cup",
+    "Ecuador World Cup",
+    # General tournament catch-alls
+    "World Cup 2026 injury",
+    "World Cup 2026 record",
+    "World Cup 2026 result",
 ]
 
 # Direct RSS feeds from major football outlets — supplement to Google News
