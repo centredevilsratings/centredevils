@@ -551,17 +551,22 @@ _OPS_KEYWORDS = (
     "here we go", "done deal", "breaking", "just in", "exclusive",
     # Match events / on-field news (added 2026-06-21 — auto-drafter was
     # missing World Cup records, penalty incidents, eliminations, etc.).
-    "hat-trick", "hat trick", "brace",
-    "scores", "scored", "score", "goal", "goals",
+    "hat-trick", "hat trick", "brace", "double", "treble",
+    "scores", "scored", "score", "scoring", "scorer", "goal", "goals",
     "penalty", "penalties", "saved penalty", "missed penalty",
     "red card", "sent off", "expelled", "var", "disallowed",
-    "winner", "equaliser", "equalizer", "comeback",
-    "record", "breaks", "sets", "most", "first ever", "first since",
-    "youngest", "oldest", "milestone", "historic", "in history",
-    "knocked out", "eliminated", "advances", "advance to",
-    "qualifies", "qualified", "qualify",
-    "lifts", "champion", "champions", "crowned", "title",
-    "beat", "beaten", "defeat", "thrash", "stun", "stunned",
+    "winner", "equaliser", "equalizer", "comeback", "stoppage",
+    "record", "breaks", "broke", "sets", "set", "most", "tally",
+    "first ever", "first since", "all-time", "leading", "history",
+    "youngest", "oldest", "milestone", "historic", "legend",
+    "knocked out", "eliminated", "elimination", "advances", "advance",
+    "through", "progress", "qualifies", "qualified", "qualify",
+    "lifts", "champion", "champions", "crowned", "title", "trophy",
+    "beat", "beaten", "defeat", "thrash", "stun", "stunned", "draw",
+    # Managerial / club news the keyword list was still missing.
+    "naming", "names", "name", "elects", "elected", "chief",
+    "in talks", "close to", "set to", "verge", "wanted", "target",
+    "linked", "interest", "approach", "swoop", "pursue",
 )
 
 

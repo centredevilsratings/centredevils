@@ -179,8 +179,29 @@ class _Listener(tweepy.StreamingClient):
         }
         self._loop.call_soon_threadsafe(self._queue.put_nowait, event)
 
+    def on_connect(self):  # type: ignore[override]
+        log.info("X stream CONNECTED — real-time tweets flowing")
+
+    def on_disconnect(self):  # type: ignore[override]
+        log.warning("X stream DISCONNECTED — falling back to RSS until reconnect")
+
     def on_errors(self, errors):  # type: ignore[override]
         log.warning(f"X stream errors: {errors}")
+
+    def on_request_error(self, status_code):  # type: ignore[override]
+        # 429 TooManyConnections = another connection holds the single
+        # allowed slot (redeploy overlap OR >1 running instance). tweepy
+        # retries with backoff; this makes the cause visible in logs.
+        if status_code == 429:
+            log.error(
+                "X stream HTTP 429 — the single allowed streaming connection "
+                "is already in use. Cause: a redeploy still draining, OR the "
+                "Render service is running MORE THAN ONE INSTANCE (X allows "
+                "only 1 stream per token). tweepy will keep retrying with "
+                "backoff; if this persists, set Render instance count to 1."
+            )
+        else:
+            log.error(f"X stream HTTP error {status_code}")
 
     def on_exception(self, exception):  # type: ignore[override]
         log.error(f"X stream exception: {exception}")
