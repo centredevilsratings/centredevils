@@ -28,11 +28,12 @@ import threading
 
 log = logging.getLogger("football-bot.budget")
 
-# Default raised to 16 on 2026-06-09 as a one-day bump after the Haiku-
-# removal pushed call volume up. Revert this to "10.0" (or set the env var
-# SONNET_DAILY_CAP_USD=10 on Render and remove this line) once the
-# trusted-source pre-filter has had a day to settle and call volume drops.
-DAILY_CAP_USD = float(os.environ.get("SONNET_DAILY_CAP_USD", "16.0"))
+# Raised to 25 on 2026-06-23 per operator decision — the World Cup pushed
+# volume up and the previous $16 cap was silencing the drafter mid-match
+# (team reported "hits a limit then stops until reset"). $25/day gives
+# headroom for tournament-level coverage. Override on Render via the
+# SONNET_DAILY_CAP_USD env var if you want a different ceiling.
+DAILY_CAP_USD = float(os.environ.get("SONNET_DAILY_CAP_USD", "25.0"))
 
 # Separate sub-cap for the interactive #bot-chat assistant. Interactive
 # calls also charge the main DAILY_CAP_USD, so a chatty day can't blow the

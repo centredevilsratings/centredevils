@@ -704,14 +704,40 @@ _ACTION_KEYWORDS = [
                      "release clause", "signs new deal", "fresh terms")),
     ("rejection",   ("rejected", "rebuffed", "turned down", "knocked back")),
     ("loan",        (" loan ", "loan move", "loan deal", "loan with option")),
+    # Match events — put record/goal/result BEFORE transfer so WC on-field
+    # news gets a specific action (so 5 outlets reporting "Messi breaks
+    # record" collapse to messi|record, not messi|news).
     ("record",      ("most decorated", "highest", "fewest", "oldest",
                      "youngest", "first since", "only team", "longest",
-                     "fastest", "record", " ever ", "in history")),
+                     "fastest", "record", "all-time", "leading scorer",
+                     " ever ", "in history", "milestone", "makes history")),
+    ("goal",        ("scores", "scored", " brace", "hat-trick", "hat trick",
+                     "opener", "equaliser", "equalizer", "penalty",
+                     "stunner", "double", "winner")),
+    ("result",      ("beat", "beaten", "defeat", "held to", " draw",
+                     "thrash", "stun", "eliminated", "knocked out",
+                     "advance", "through to", "into the last", "qualify",
+                     "crash out", "dumped out")),
     ("transfer",    ("done deal", "here we go", "agreed", "agree fee",
                      "completed", "signed", "signing", " bid ", "submit bid",
                      "release-clause bid", "approach", "offered", "interest",
                      " talks", "monitoring", "eyeing", "linked", "transfer")),
 ]
+
+
+def _canonical_subject(name: str) -> str:
+    """Collapse name variants so the same subject dedups across outlets.
+
+    Persons → last-name token: "Lionel Messi" / "Leo Messi" / "Messi" all
+    become "messi". Clubs / national teams / awards keep their full slug so
+    "Real Madrid" and "Atletico Madrid" stay distinct.
+    """
+    name = (name or "").strip()
+    if not name:
+        return ""
+    if imago._is_institution(name):
+        return name.lower().replace(" ", "-")
+    return name.split()[-1].lower()
 
 
 def soft_dedup_key(draft: str) -> str:
@@ -726,7 +752,9 @@ def soft_dedup_key(draft: str) -> str:
     subjects = imago.subjects_from_draft(draft, max_subjects=1)
     if not subjects:
         return ""
-    subject = subjects[0].lower().strip().replace(" ", "-")
+    subject = _canonical_subject(subjects[0])
+    if not subject:
+        return ""
 
     text = " " + draft.lower() + " "                  # pad for word-boundary
     if "🎙" in draft:
