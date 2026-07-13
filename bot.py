@@ -1040,11 +1040,8 @@ async def main():
 
         if X_BEARER_TOKEN and drafts_webhook:
             tweet_queue: asyncio.Queue = asyncio.Queue(maxsize=500)
-            loop = asyncio.get_running_loop()
             try:
-                x_stream.start_stream(X_BEARER_TOKEN, loop, tweet_queue)
-                log.info(f"X filtered stream started — "
-                         f"{len(x_stream.JOURNALISTS)} handles")
+                # Consumer: drafts each queued tweet.
                 tasks.append(asyncio.create_task(tweet_drafter.consume_stream(
                     tweet_queue,
                     claude_client,
@@ -1053,10 +1050,29 @@ async def main():
                     dedup_check=lambda sid, sk: draft_already_posted(conn, sid, sk),
                     dedup_record=lambda sid, sk: record_draft_posted(conn, sid, sk),
                 )))
+                # Producers: poll the X search API instead of the filtered
+                # stream (the stream's single-connection limit kept 429ing).
+                # Priority accounts (stats + tier-1 breakers) polled fast for
+                # in-game content; everyone else on a slower cadence.
+                priority = x_stream.PRIORITY_HANDLES
+                priority_set = {h.lower() for h in priority}
+                rest = [h for h in x_stream.JOURNALISTS
+                        if h.lower() not in priority_set]
+                tasks.append(asyncio.create_task(x_stream.poll_recent_tweets(
+                    X_BEARER_TOKEN, tweet_queue, priority,
+                    x_stream.PRIORITY_INTERVAL, "priority")))
+                tasks.append(asyncio.create_task(x_stream.poll_recent_tweets(
+                    X_BEARER_TOKEN, tweet_queue, rest,
+                    x_stream.FULL_INTERVAL, "full")))
+                log.info(
+                    f"X polling started — {len(priority)} priority handles "
+                    f"@{x_stream.PRIORITY_INTERVAL}s, {len(rest)} others "
+                    f"@{x_stream.FULL_INTERVAL}s"
+                )
             except Exception as e:
-                log.error(f"Failed to start X stream: {e}", exc_info=True)
+                log.error(f"Failed to start X polling: {e}", exc_info=True)
         else:
-            log.info("X stream disabled (X_BEARER_TOKEN or "
+            log.info("X ingestion disabled (X_BEARER_TOKEN or "
                      "TWEET_DRAFTS_WEBHOOK missing)")
 
         await asyncio.gather(*tasks)

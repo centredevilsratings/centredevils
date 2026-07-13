@@ -1,18 +1,40 @@
 """
-X (Twitter) filtered stream listener for football journalists.
-Pushes incoming tweets onto an asyncio.Queue for downstream processing.
+X (Twitter) ingestion for football journalists.
+
+Two producers feed the same asyncio.Queue consumed by the drafter:
+
+  * poll_recent_tweets() — the PRIMARY path. Polls GET /2/tweets/search/recent
+    on an interval. Plain REST requests, so it has NO single-connection limit
+    (the filtered stream is capped at ONE connection per token and kept
+    hitting 429 TooManyConnections across redeploys / multiple instances).
+    Survives redeploys cleanly and can't get "too many connections".
+
+  * the tweepy filtered-stream code below is retained but NO LONGER WIRED UP
+    (bot.py uses the poller). Kept for reference / quick rollback.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import threading
-from typing import Iterable
+from collections import deque
+from typing import Iterable, Optional
 
+import httpx
 import tweepy
 
 log = logging.getLogger("football-bot.x_stream")
+
+# Poll cadence (seconds). Priority accounts (stats + tier-1 breakers) are
+# polled fast for head-turning in-game content; everyone else slower. Both
+# are env-overridable so the cadence can be tuned to the X API tier's rate
+# limit without a code change.
+PRIORITY_INTERVAL = int(os.environ.get("X_POLL_PRIORITY_INTERVAL", "70"))
+FULL_INTERVAL = int(os.environ.get("X_POLL_FULL_INTERVAL", "200"))
+
+_SEARCH_URL = "https://api.twitter.com/2/tweets/search/recent"
 
 
 # ~95 football journalists, outlets, aggregators & rivals.
@@ -101,6 +123,25 @@ JOURNALISTS: list[str] = [
     "StatsBomb",        # StatsBomb analytics
     "InfogolApp",       # Infogol stats
     "MisterChip",       # Alexis Martín-Tamayo, Spanish stats guru
+]
+
+# High-priority accounts polled on the FAST cadence — the head-turning
+# in-game stats and the tier-1 breakers. These are the ones that need to
+# land in #news-tweets within ~a minute during matches. All are a subset of
+# JOURNALISTS above; the full list is polled on the slower cadence minus
+# these (so no account is polled by both loops).
+PRIORITY_HANDLES: list[str] = [
+    # Live stats (the "head-turning stat during the game" accounts)
+    "OptaJoe", "OptaJose", "OptaPaolo", "OptaFranz", "OptaJean", "OptaJoao",
+    "OptaAnalyst", "OptaFacts", "Squawka", "SquawkaNews", "WhoScored",
+    "SofascoreINT", "StatMuse", "StatsBomb", "InfogolApp", "MisterChip",
+    # Tier-1 transfer / breaking reporters
+    "FabrizioRomano", "David_Ornstein", "DiMarzio", "NicoSchira",
+    "Plettigoal", "MatteMoretto",
+    # World Cup / Argentina real-time
+    "gastonedul", "CesarLuisMerlo", "TyCSports", "FIFAWorldCup",
+    # Fast-breaking aggregators
+    "brfootball", "OneFootball", "TouchlineX", "DeadlineDayLive",
 ]
 
 
@@ -255,3 +296,129 @@ def start_stream(bearer_token: str, loop: asyncio.AbstractEventLoop,
     # tweepy's threaded filter creates its own thread internally; we return
     # the client's thread handle for caller visibility.
     return client.thread  # type: ignore[attr-defined]
+
+
+# ─── Recent-search polling (PRIMARY ingestion path) ──────────────────────────
+def _build_search_queries(handles: Iterable[str], max_len: int = 460) -> list[str]:
+    """OR-joined `from:` clauses for GET /2/tweets/search/recent, each short
+    enough that wrapping in parens + appending `-is:retweet -is:reply` stays
+    under the 512-char query cap."""
+    return _chunk_rules(handles, max_len=max_len)
+
+
+# Bounded global dedup of tweet IDs across BOTH poll loops so a tweet caught
+# by the fast priority loop is never re-emitted by the slow full loop.
+_SEEN_MAX = 8000
+_seen_order: deque = deque()
+_seen_set: set = set()
+
+
+def _mark_seen(tweet_id: str) -> bool:
+    """Return True if this is the first time we've seen the id (and record it),
+    False if already seen."""
+    if tweet_id in _seen_set:
+        return False
+    _seen_set.add(tweet_id)
+    _seen_order.append(tweet_id)
+    if len(_seen_order) > _SEEN_MAX:
+        old = _seen_order.popleft()
+        _seen_set.discard(old)
+    return True
+
+
+def _event_from_json(tweet: dict, users: dict, media: dict) -> Optional[dict]:
+    """Build a queue event from a search/recent tweet object. None to skip."""
+    # -is:retweet -is:reply is applied at the API; still drop quote-tweets.
+    for ref in (tweet.get("referenced_tweets") or []):
+        if ref.get("type") in ("retweeted", "replied_to", "quoted"):
+            return None
+    author = users.get(tweet.get("author_id"))
+    if not author:
+        return None
+    # First attached PHOTO only (skip video/GIF preview stills).
+    image_url = None
+    keys = ((tweet.get("attachments") or {}).get("media_keys")) or []
+    for k in keys:
+        m = media.get(k)
+        if m and m.get("type") == "photo" and m.get("url"):
+            image_url = m["url"]
+            break
+    return {
+        "id": str(tweet["id"]),
+        "text": tweet.get("text", ""),
+        "handle": author.get("username", ""),
+        "author_name": author.get("name", ""),
+        "created_at": tweet.get("created_at"),
+        "image_url": image_url,
+    }
+
+
+async def poll_recent_tweets(bearer_token: str, queue: asyncio.Queue,
+                             handles: list[str], interval: int,
+                             label: str = "poll") -> None:
+    """Poll GET /2/tweets/search/recent for `handles` every `interval`s and
+    push new original tweets onto `queue`. The first pass per query only
+    seeds since_id (no history dump); subsequent passes emit only new tweets.
+    Never raises — logs and continues so one bad request can't kill the loop.
+    """
+    headers = {"Authorization": f"Bearer {bearer_token}"}
+    queries = _build_search_queries(handles)
+    since: dict[int, str] = {}
+    seeded = False
+    log.info(f"X poll[{label}] starting — {len(handles)} handles, "
+             f"{len(queries)} queries, every {interval}s")
+    async with httpx.AsyncClient(timeout=20) as client:
+        while True:
+            for i, q in enumerate(queries):
+                params = {
+                    "query": f"({q}) -is:retweet -is:reply",
+                    "max_results": 50,
+                    "tweet.fields": "author_id,created_at,attachments,referenced_tweets",
+                    "expansions": "author_id,attachments.media_keys",
+                    "user.fields": "username,name",
+                    "media.fields": "url,preview_image_url,type",
+                }
+                if since.get(i):
+                    params["since_id"] = since[i]
+                try:
+                    r = await client.get(_SEARCH_URL, headers=headers, params=params)
+                except Exception as e:
+                    log.warning(f"X poll[{label}] request failed: {e}")
+                    continue
+                if r.status_code == 429:
+                    log.warning(f"X poll[{label}] rate-limited (429) — backing "
+                                f"off 60s. Consider raising X_POLL_*_INTERVAL.")
+                    await asyncio.sleep(60)
+                    continue
+                if r.status_code != 200:
+                    log.warning(f"X poll[{label}] HTTP {r.status_code}: "
+                                f"{r.text[:200]}")
+                    continue
+                try:
+                    data = r.json()
+                except Exception:
+                    continue
+                tweets = data.get("data") or []
+                inc = data.get("includes") or {}
+                users = {u["id"]: u for u in inc.get("users", [])}
+                media = {m["media_key"]: m for m in inc.get("media", [])}
+                if tweets:
+                    since[i] = tweets[0]["id"]      # newest first
+                if not seeded:
+                    continue                         # first pass: seed only
+                emitted = 0
+                for t in reversed(tweets):           # oldest → newest
+                    if not _mark_seen(str(t["id"])):
+                        continue
+                    ev = _event_from_json(t, users, media)
+                    if not ev:
+                        continue
+                    try:
+                        queue.put_nowait(ev)
+                        emitted += 1
+                    except asyncio.QueueFull:
+                        log.warning(f"X poll[{label}] queue full — dropping tweet")
+                if emitted:
+                    log.info(f"X poll[{label}] queued {emitted} new tweet(s)")
+            seeded = True
+            await asyncio.sleep(interval)
