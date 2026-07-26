@@ -661,12 +661,14 @@ async def _draft_article_to_webhook(http: httpx.AsyncClient,
                                     webhook_url: str,
                                     title: str, summary: str,
                                     source: str, url: str,
+                                    article_body: str = "",
                                     **_ignored) -> None:
     """Fire-and-forget: draft a CentreGoals tweet from an article and post it.
 
-    No photo is attached — drafts are text + source link only. The image_url
-    kwarg is accepted but ignored for backward compatibility with any caller
-    still passing it.
+    No photo is attached — drafts are text + source link only. article_body
+    is the ORIGINAL extracted article text; it's used as ground truth for the
+    faithfulness verifier so fabrication introduced at EITHER the
+    summary hop or the draft hop is caught before posting.
     """
     try:
         result = await asyncio.to_thread(
@@ -680,6 +682,19 @@ async def _draft_article_to_webhook(http: httpx.AsyncClient,
             log.info(
                 f"DUP draft skipped (story={story_id} soft={soft_key}): "
                 f"{title[:60]}"
+            )
+            return
+        # Verify the draft against the ORIGINAL article (body when we have it,
+        # else title+summary). Catches fabrication from either Sonnet hop.
+        ground_truth = (article_body or "").strip() or f"{title}\n\n{summary}"
+        v_ok, issues = await asyncio.to_thread(
+            tweet_drafter.verify_draft, claude_client, ground_truth,
+            draft, "🎙" in draft,
+        )
+        if not v_ok:
+            log.warning(
+                f"FABRICATION BLOCKED (article {source}): {issues} | "
+                f"draft={draft[:80]}"
             )
             return
         ok = await tweet_drafter.post_draft(http, webhook_url, draft, url)
@@ -911,6 +926,7 @@ async def process_article(
     if drafts_webhook and urgency >= 2:
         asyncio.create_task(_draft_article_to_webhook(
             client, conn, drafts_webhook, title_en, summary_en, source, url,
+            article_body=body,
         ))
 
     # Clustering

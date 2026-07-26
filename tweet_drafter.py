@@ -270,7 +270,9 @@ Many football names are shared by multiple famous players, past and present. Nev
 If either condition fails, you are FORBIDDEN from using "HERE WE GO". Instead use one of: "DONE DEAL", "AGREED", "SIGNED", "CONFIRMED", "COMPLETED". Do not put words in Fabrizio's mouth. Do not let an aggregator's hype phrasing trigger it. If unsure, never "HERE WE GO".
 
 QUOTE RULES — VIRAL-WORTHY ONLY:
-CentreGoals is English-only. ALL quote_text and ALL line1_template / context output MUST be in natural, idiomatic English — regardless of the source language. If the source quote is in Spanish, French, Italian, German, Portuguese, Turkish, Arabic, etc., translate it into English BEFORE writing it into quote_text. Translate the meaning faithfully (do not paraphrase aggressively), but the OUTPUT must read like a native English football tweet. Never emit a quote_text — or any draft field — that contains untranslated foreign-language text. If the quote is so culturally specific that translation would dilute it (rare), prefer skip=true.
+NEVER FABRICATE A QUOTE — this is the most dangerous thing you can do. is_quote=true is ONLY permitted when the source text literally contains the actual words being quoted (inside quotation marks or clearly presented as a direct quote). If the source only PARAPHRASES what someone said, or reports it indirectly ("X said he was happy"), you may NOT turn it into a verbatim quote — set is_quote=false and either draft it as news or skip. The quote_text must be the person's REAL words from the source, not your reconstruction of what they probably said. If you cannot find the literal quoted words in the source, is_quote=false. No exceptions.
+
+CentreGoals is English-only. ALL quote_text and ALL line1_template / context output MUST be in natural, idiomatic English — regardless of the source language. If the source quote is in Spanish, French, Italian, German, Portuguese, Turkish, Arabic, etc., translate it into English BEFORE writing it into quote_text (translation of the person's REAL words is allowed and required; INVENTING words is not). Translate the meaning faithfully (do not paraphrase aggressively), but the OUTPUT must read like a native English football tweet. Never emit a quote_text — or any draft field — that contains untranslated foreign-language text. If the quote is so culturally specific that translation would dilute it (rare), prefer skip=true.
 
 Set is_quote=true ONLY when the source contains a quote that will genuinely BLOW UP the internet. Sensational, controversial, or emotionally explosive. Examples of what DOES qualify:
 - Manager attacking another club / player / referee / federation
@@ -812,6 +814,76 @@ async def post_draft(client: httpx.AsyncClient, webhook_url: str,
         return False
 
 
+# ─── Adversarial faithfulness verifier ───────────────────────────────────────
+# A SECOND Sonnet call that compares the finished draft against the ORIGINAL
+# source and blocks anything not directly supported — fabricated numbers,
+# invented quotes, added clubs/names, escalated claims. This is the
+# structural backstop that prompt rules alone can't guarantee: even if the
+# drafter (or the article-summary hop) invents something, the draft is
+# checked against ground truth before it can post.
+_VERIFIER_SYSTEM = """You are a STRICT fact-checker for football news drafts. You are given a SOURCE (the original tweet or article text) and a DRAFT tweet written from it. Your ONLY job is to catch fabrication and alteration.
+
+Return ONLY JSON: {"ok": true or false, "issues": ["short reason", ...]}
+
+Set ok=false if the DRAFT contains ANYTHING not directly supported by the SOURCE, including:
+- A number, fee, wage, debt, date, age, score, or statistic not in the source — OR a converted/rounded/altered version of one (source "800M SAR" but draft "$1 billion" or "$212M"; source "€62.5m" but draft "around €60m").
+- A currency different from the one the source uses.
+- A QUOTE whose wording is not literally present in the source (fabricated quotes, or paraphrases presented as verbatim quotes). This is the most serious — be ruthless.
+- A club, player, manager, or nationality not mentioned in the source, or a wrong affiliation (calling someone a club's player/manager when the source doesn't say so).
+- An escalated or stronger claim than the source makes (source "in talks"/"interested" but draft "DONE DEAL"/"AGREED"; source "surpasses one player" but draft "all-time record"; source "could" but draft states as fact).
+- Any event, outcome, injury, result, or fact the source does not actually state.
+
+Rephrasing and compression are FINE. Inventing or altering facts is NOT. Ignore formatting (🚨 prefix, bold unicode letters, [@source] line, emojis) — judge only the factual claims. If every fact, number, name and quote in the draft traces directly to the source, set ok=true with issues:[].
+
+When uncertain whether something is supported, set ok=false — it is far better to drop a good draft than to post a fabricated one."""
+
+
+def verify_draft(claude: "anthropic.Anthropic", source_text: str,
+                 draft: str, is_quote: bool = False) -> tuple[bool, list]:
+    """Return (ok, issues). ok=False means the draft contains a claim not
+    supported by the source and must NOT be posted.
+
+    Fails OPEN (returns ok=True) only on verifier INFRASTRUCTURE errors
+    (API/parse failure) — those are rare and transient, and hard-blocking on
+    them would silence the channel. An explicit ok=false verdict always
+    blocks. Charges the shared daily budget.
+    """
+    if not source_text or not draft:
+        return True, []
+    user_msg = (
+        f"SOURCE:\n\"\"\"\n{source_text.strip()[:2500]}\n\"\"\"\n\n"
+        f"DRAFT:\n\"\"\"\n{draft.strip()}\n\"\"\"\n\n"
+        f"{'This draft presents a verbatim QUOTE — verify the quoted wording appears literally in the source. ' if is_quote else ''}"
+        f"Return the JSON verdict."
+    )
+    try:
+        msg = claude.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=400,
+            thinking={"type": "disabled"},
+            output_config={"effort": "low"},
+            system=_VERIFIER_SYSTEM,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        raw = msg.content[0].text
+        try:
+            sonnet_budget.record_usage(msg.usage)
+        except Exception:
+            pass
+    except Exception as e:
+        log.warning(f"Verifier call failed (allowing draft): {e}")
+        return True, []
+
+    parsed = _parse_json(raw)
+    if not isinstance(parsed, dict) or "ok" not in parsed:
+        # Couldn't parse a verdict — fail open but log.
+        log.warning(f"Verifier returned unparseable verdict (allowing): {raw[:150]}")
+        return True, []
+    ok = bool(parsed.get("ok"))
+    issues = parsed.get("issues") or []
+    return ok, issues
+
+
 # ─── Stream consumer ─────────────────────────────────────────────────────────
 async def consume_stream(queue: asyncio.Queue,
                          claude: anthropic.Anthropic,
@@ -835,6 +907,16 @@ async def consume_stream(queue: asyncio.Queue,
                 log.info(
                     f"DUP draft skipped (story={story_id} soft={soft_key}): "
                     f"{draft[:60]}"
+                )
+                continue
+            # Faithfulness gate: block anything the source tweet doesn't support.
+            v_ok, issues = await asyncio.to_thread(
+                verify_draft, claude, event["text"], draft, "🎙" in draft,
+            )
+            if not v_ok:
+                log.warning(
+                    f"FABRICATION BLOCKED (@{event['handle']}): {issues} | "
+                    f"draft={draft[:80]}"
                 )
                 continue
             source_url = f"https://twitter.com/{event['handle']}/status/{event['id']}"
