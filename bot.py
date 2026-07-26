@@ -711,6 +711,16 @@ Given a football news article (title + body text), return ONLY valid JSON with t
   "uniqueness": <integer 1-5 where 5=exclusive scoop, 1=widely reported>,
   "tags": ["tag1", "tag2"]
 }
+
+NUMBERS & CURRENCY FIDELITY — CRITICAL:
+This summary is later used to draft a public tweet, so any number you alter becomes a fabricated fact posted as truth.
+- Preserve EVERY number, fee, wage, debt, currency, date, age, and statistic EXACTLY as the article states it — same figure, same unit, same currency.
+- NEVER convert currencies. If the article says "800 million Saudi Riyal" / "800M SAR", keep it as "800 million SAR". Do NOT convert to USD/EUR/GBP, do NOT compute an approximate value, do NOT write "$212M" or "$1 billion".
+- NEVER round or change magnitude ("millions" is not "billions"; "800 million" is not "1 billion").
+- Keep the article's exact currency (SAR, €, £, $, R$, etc.) next to the figure.
+- If a figure is ambiguous or you're unsure of the currency, describe it without inventing a value (e.g. "significant debt" rather than a wrong number). Do not guess.
+- Translate the LANGUAGE to English, but never "translate" a currency or number into a different one.
+
 Do NOT wrap in markdown. Output raw JSON only."""
 
 
