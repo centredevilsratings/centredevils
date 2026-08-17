@@ -1,0 +1,11 @@
+# Render build retry marker
+
+The build for commit 279b30f ("adversarial fact-check gate") exited
+with status 1 despite identical build inputs to the previously green
+build (caf0095 — no Dockerfile/requirements changes since). Dependency
+resolution verified clean; all sources parse. Diagnosis: transient
+build-time failure on Render's side (network flake pulling base image
+or PyPI).
+
+This file exists only to create a commit that retriggers the build.
+Safe to delete at any time.
